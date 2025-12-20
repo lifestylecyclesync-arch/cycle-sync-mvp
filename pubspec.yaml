@@ -1,0 +1,22 @@
+name: cycle_sync_mvp
+description: A Flutter app for cycle syncing, focusing on cycle tracking, onboarding, dashboard, and wellness basics.
+publish_to: 'none' 
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.0.0
+  http: ^1.6.0
+  shared_preferences: ^2.0.6
+  table_calendar: ^3.0.9  # Add this line
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  # Fonts removed for test compatibility; add back later if needed
