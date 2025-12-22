@@ -5,6 +5,7 @@ class Phase {
   final String description;
   final String dietName;
   final String workoutName;
+  final String fastingType;
   final double startPercentage; // Start of phase as % of cycle (0.0 - 1.0)
   final double endPercentage;   // End of phase as % of cycle (0.0 - 1.0)
 
@@ -14,6 +15,7 @@ class Phase {
     required this.description,
     required this.dietName,
     required this.workoutName,
+    required this.fastingType,
     required this.startPercentage,
     required this.endPercentage,
   });
@@ -45,45 +47,50 @@ class CyclePhases {
       emoji: '🩸',
       description: 'Rest & Restore',
       dietName: 'Restorative Nutrition',
-      workoutName: 'Gentle / Low-Impact Training',
+      workoutName: 'Low-Impact Training',
+      fastingType: 'Power Fasting',
       startPercentage: 0.0,
-      endPercentage: 0.18, // Days 1–5 for 28-day cycle
+      endPercentage: 0.179, // Days 1–5 for 28-day cycle
     ),
     Phase(
       name: 'Follicular',
       emoji: '🌱',
       description: 'High Energy Day',
       dietName: 'Energizing Nutrition',
-      workoutName: 'Build / Mid-Impact Training',
-      startPercentage: 0.18,
-      endPercentage: 0.45, // Days 6–11 for 28-day cycle
+      workoutName: 'Mid-Impact Training',
+      fastingType: 'Power Fasting',
+      startPercentage: 0.179,
+      endPercentage: 0.429, // Days 6–12 for 28-day cycle
     ),
     Phase(
       name: 'Ovulation',
       emoji: '✨',
       description: 'Peak Energy',
-      dietName: 'Light & Fresh Nutrition',
-      workoutName: 'Peak / Strength Training',
-      startPercentage: 0.45,
-      endPercentage: 0.60, // Days 12–16 for 28-day cycle
+      dietName: 'Light & Fresh',
+      workoutName: 'Strength Training',
+      fastingType: 'Manifestation Fasting',
+      startPercentage: 0.429,
+      endPercentage: 0.536, // Days 13–15 for 28-day cycle
     ),
     Phase(
       name: 'Early Luteal',
       emoji: '🌙',
       description: 'Building Energy',
       dietName: 'Balanced Nutrition',
-      workoutName: 'Sustain / Mid-Impact Training',
-      startPercentage: 0.60,
-      endPercentage: 0.75, // Days 17–21 for 28-day cycle
+      workoutName: 'Mid-Impact Training',
+      fastingType: 'Power Fasting',
+      startPercentage: 0.536,
+      endPercentage: 0.714, // Days 16–20 for 28-day cycle
     ),
     Phase(
       name: 'Luteal',
       emoji: '🌙',
       description: 'Inward Focus',
       dietName: 'Calming Nutrition',
-      workoutName: 'Restore / Mid- to Low-Impact Training',
-      startPercentage: 0.75,
-      endPercentage: 1.0, // Days 22–28 for 28-day cycle
+      workoutName: 'Mid- to Low-Impact Training',
+      fastingType: 'Nurture Fasting',
+      startPercentage: 0.714,
+      endPercentage: 1.0, // Days 20–28 for 28-day cycle
     ),
   ];
 

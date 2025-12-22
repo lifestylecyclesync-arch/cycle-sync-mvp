@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/cycle_utils.dart';
 import '../models/phase.dart';
-import 'nutrition_meals_screen.dart';
+import '../utils/goal_manager.dart';
+import '../utils/avatar_manager.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,19 +16,27 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-  int _selectedNavIndex = 1; // Calendar is default/middle
-
-  // Cycle data loaded from SharedPreferences
+  // Cycle data
   late DateTime _lastPeriodStart;
   late int _cycleLength;
   bool _isLoading = true;
+  List<Goal> _goals = [];
+  int _avatarRefreshKey = 0; // Trigger FutureBuilder refresh
 
   @override
   void initState() {
     super.initState();
     _loadCycleData();
+    _loadGoals();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh avatar when returning to this screen
+    setState(() {
+      _avatarRefreshKey++;
+    });
   }
 
   Future<void> _loadCycleData() async {
@@ -44,40 +54,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  Future<void> _loadGoals() async {
+    final goals = await GoalManager.getAllGoals();
+    setState(() {
+      _goals = goals;
+    });
+  }
+
   int _getCurrentCycleDay() {
     int daysSinceStart = DateTime.now().difference(_lastPeriodStart).inDays;
     return (daysSinceStart % _cycleLength) + 1;
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (parts.isNotEmpty && parts[0].isNotEmpty) {
+      return parts[0][0].toUpperCase();
+    }
+    return '?';
+  }
+
+  Color _getPastelColor(String initials) {
+    final colors = [
+      const Color(0xFFFFB3BA), // Pastel pink
+      const Color(0xFFFFDFBA), // Pastel peach
+      const Color(0xFFFFFABA), // Pastel yellow
+      const Color(0xFFBAFFBA), // Pastel green
+      const Color(0xFFBAE1FF), // Pastel blue
+      const Color(0xFFE0BBE4), // Pastel purple
+      const Color(0xFFFFBBE3), // Pastel magenta
+    ];
+    final hashCode = initials.hashCode;
+    return colors[hashCode % colors.length];
   }
 
   String _getCurrentPhase() {
     return getCyclePhase(_lastPeriodStart, _cycleLength, DateTime.now());
   }
 
-  String _getCyclePhase(DateTime day) {
-    return getCyclePhase(_lastPeriodStart, _cycleLength, day);
-  }
-
-  int _getOvulationDay() {
-    return (_cycleLength ~/ 2);
-  }
-
   Color _getPhaseColor(String phase) {
     return getPhaseColor(phase);
-  }
-
-  void _showDayDetails(DateTime day) {
-    String phase = _getCyclePhase(day);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DayDetailsModal(
-        date: day,
-        phase: phase,
-        lastPeriodStart: _lastPeriodStart,
-        cycleLength: _cycleLength,
-      ),
-    );
   }
 
   @override
@@ -93,592 +111,235 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return GradientWrapper(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: Column(
-          children: [
-            // Fixed Header - Full Square, No Rounded Corners
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20.0),
-              color: Colors.grey.shade200,
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Day ${_getCurrentCycleDay()} • ${getPhaseEmoji(_getCurrentPhase())} ${_getCurrentPhase()} phase',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        color: Color(0xFF333333),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _getPhaseExtension(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF666666),
-                      ),
-                    ),
-                  ],
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20.0),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.3),
+                      _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.15),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-
-            // Calendar in Middle - Scrollable for Month Navigation
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: TableCalendar(
-                    firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2030, 12, 31),
-                    focusedDay: _focusedDay,
-                    calendarFormat: CalendarFormat.month,
-                    headerStyle: HeaderStyle(
-                      formatButtonVisible: false,
-                      titleCentered: true,
-                      titleTextStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Colors.grey.shade300,
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                      leftChevronIcon: const Icon(
-                        Icons.chevron_left,
-                        color: Color(0xFF333333),
-                      ),
-                      rightChevronIcon: const Icon(
-                        Icons.chevron_right,
-                        color: Color(0xFF333333),
-                      ),
-                    ),
-                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                    onDaySelected: (selectedDay, focusedDay) {
-                      setState(() {
-                        _selectedDay = selectedDay;
-                        _focusedDay = focusedDay;
-                      });
-                      _showDayDetails(selectedDay);
-                    },
-                    onPageChanged: (focusedDay) {
-                      _focusedDay = focusedDay;
-                    },
-                    calendarBuilders: CalendarBuilders(
-                      defaultBuilder: (context, day, focusedDay) {
-                        String phase = _getCyclePhase(day);
-                        bool isToday = isSameDay(day, DateTime.now());
-                        int dayInCycle =
-                            ((day.difference(_lastPeriodStart).inDays %
-                                    _cycleLength) +
-                                1);
-                        int ovulationDay = _getOvulationDay();
-                        bool isOvulationDay = dayInCycle == ovulationDay;
-
-                        return Center(
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _getPhaseColor(phase),
-                              boxShadow: isToday
-                                  ? [
-                                      BoxShadow(
-                                        color: _getPhaseColor(phase)
-                                            .withValues(alpha: 0.5),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (isToday)
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFF333333),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                if (isOvulationDay)
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFF333333),
-                                        width: 1.5,
-                                        strokeAlign:
-                                            BorderSide.strokeAlignOutside,
-                                      ),
-                                    ),
-                                  ),
                                 Text(
-                                  '${day.day}',
-                                  style: TextStyle(
-                                    color: const Color(0xFF333333),
-                                    fontWeight: isToday
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    fontSize: isToday ? 16 : 14,
+                                  'Your Cycle Insights',
+                                  style: const TextStyle(
+                                    fontSize: 28,
+                                    color: Color(0xFF333333),
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Cycle day ${_getCurrentCycleDay()} of $_cycleLength',
+                                  style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF666666),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        // Bottom Navigation with 5 Items + Center Plus
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              BottomNavigationBar(
-                currentIndex: _selectedNavIndex == 2 ? 1 : _selectedNavIndex,
-                onTap: (index) {
-                  setState(() {
-                    _selectedNavIndex = index;
-                  });
-                  if (index == 3) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Trackers coming soon!')),
-                    );
-                  } else if (index == 4) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Analysis coming soon!')),
-                    );
-                  }
-                },
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home),
-                    label: 'Dashboard',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.calendar_month),
-                    label: 'Calendar',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: SizedBox.shrink(),
-                    label: '',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.trending_up),
-                    label: 'Trackers',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.bar_chart),
-                    label: 'Analysis',
-                  ),
-                ],
-                selectedItemColor: const Color(0xFF333333),
-                unselectedItemColor: Colors.grey,
-                backgroundColor: Colors.white,
-                elevation: 0,
-                type: BottomNavigationBarType.fixed,
-              ),
-              // Plus Button (Floating in the middle)
-              Positioned(
-                bottom: 5,
-                child: Container(
-                  width: 65,
-                  height: 65,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF333333),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedNavIndex = 2;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Add period coming soon!')),
-                        );
-                      },
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 38,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _getPhaseExtension() {
-    return 'Day $_cycleLength - last cycle day';
-  }
-}
-
-/// Modal popup for day details with lifestyle recommendations
-class DayDetailsModal extends StatefulWidget {
-  final DateTime date;
-  final String phase;
-  final DateTime lastPeriodStart;
-  final int cycleLength;
-
-  const DayDetailsModal({
-    super.key,
-    required this.date,
-    required this.phase,
-    required this.lastPeriodStart,
-    required this.cycleLength,
-  });
-
-  @override
-  State<DayDetailsModal> createState() => _DayDetailsModalState();
-}
-
-class _DayDetailsModalState extends State<DayDetailsModal> {
-  late Phase? _phaseData;
-  bool _nutrition = false;
-  bool _fitness = false;
-  bool _mood = false;
-  bool _wellness = false;
-  Map<String, bool> _trackedExercises = {}; // Track exercise completion status
-
-  static const List<String> _fitnessExercises = [
-    'Walking',
-    'Yoga',
-    'Pilates',
-    'Swimming',
-    'Cycling',
-    'Stretching',
-    'Tai Chi',
-    'Light Dance',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _phaseData = CyclePhases.findPhaseByName(widget.phase);
-    _loadUserPreferences();
-  }
-
-  Future<void> _loadUserPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _nutrition = prefs.getBool('lifestyle_nutrition') ?? false;
-      _fitness = prefs.getBool('lifestyle_fitness') ?? false;
-      _mood = prefs.getBool('lifestyle_mood') ?? false;
-      _wellness = prefs.getBool('lifestyle_wellness') ?? false;
-
-      // Load tracked exercises for this date
-      String dateKey = 'fitness_${widget.date.toIso8601String().split('T')[0]}';
-      String? trackedStr = prefs.getString(dateKey);
-      if (trackedStr != null) {
-        _trackedExercises = {};
-        List<String> items = trackedStr.split(',');
-        for (String item in items) {
-          List<String> parts = item.split(':');
-          if (parts.length == 2) {
-            _trackedExercises[parts[0]] = parts[1] == 'true';
-          }
-        }
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    int dayOfCycle = (widget.date.difference(widget.lastPeriodStart).inDays %
-            widget.cycleLength) +
-        1;
-    String dateStr = widget.date.toLocal().toString().split(' ')[0];
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.95,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Scrollable Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Phase Card - Hero Section
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24.0),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            getPhaseColor(widget.phase),
-                            getPhaseColor(widget.phase).withValues(alpha: 0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Day $dayOfCycle',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFF333333),
-                                      ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                              );
+                            },
+                            child: FutureBuilder<List<Object>>(
+                              key: ValueKey(_avatarRefreshKey),
+                              future: Future.wait([
+                                SharedPreferences.getInstance(),
+                                AvatarManager.getSelectedAvatar().then((avatar) => avatar ?? AvatarManager.getDefaultAvatar()),
+                              ]),
+                              builder: (context, snapshot) {
+                                String userName = 'Guest';
+                                AvatarOption? avatar;
+                                
+                                if (snapshot.hasData) {
+                                  final prefs = snapshot.data![0] as SharedPreferences;
+                                  avatar = snapshot.data![1] as AvatarOption?;
+                                  final savedName = prefs.getString('userName') ?? '';
+                                  userName = savedName.isEmpty ? 'Guest' : savedName;
+                                }
+                                
+                                final initials = _getInitials(userName);
+                                final pastelColor = _getPastelColor(initials);
+                                
+                                if (avatar?.isPhoto == true && avatar?.photoPath != null) {
+                                  return CircleAvatar(
+                                    radius: 24,
+                                    backgroundImage: FileImage(File(avatar!.photoPath!)),
+                                  );
+                                }
+                                
+                                return CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: avatar?.color ?? pastelColor,
+                                  child: Text(
+                                    avatar?.emoji ?? initials,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF333333),
                                     ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          _phaseData?.emoji ?? '🌙',
-                                          style: const TextStyle(fontSize: 40),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                widget.phase,
-                                                style: const TextStyle(
-                                                  fontSize: 24,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF333333),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              if (_phaseData != null)
-                                                Text(
-                                                  _phaseData!.getDayRange(
-                                                      widget.cycleLength),
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    color: Color(0xFF666666),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.close,
-                                    color: Colors.white),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              dateStr,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF333333),
-                              ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
+                  ),
+                ),
+              ),
 
-                    const SizedBox(height: 28),
+              // Content
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 60.0),
+                child: Column(
+                  children: [
+                    // Goals Section
+                    _buildGoalsCard(),
+                    const SizedBox(height: 24),
 
-                    // Description Section
-                    if (_phaseData != null) ...[
-                      Text(
-                        'Energy Level',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF666666),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _phaseData!.description,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF333333),
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                    // Phase Progress Circle
+                    _buildPhaseProgressCard(),
+                    const SizedBox(height: 24),
 
-                    // Recommendations Section
-                    Text(
-                      'Your Lifestyle Plan',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+                    // Phase Details
+                    _buildPhaseDetailsCard(),
+                    const SizedBox(height: 24),
 
-                    if (_nutrition) ...[
-                      _buildNutritionCircles(),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_fitness) ...[
-                      _buildFitnessTile(),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_mood) ...[
-                      _buildDashboardTile(
-                        emoji: '😊',
-                        title: 'Mood & Productivity',
-                        subtitle: 'Balance your energy',
-                        value: _phaseData?.description ?? 'Focus on balance',
-                        onEdit: null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_wellness) ...[
-                      _buildDashboardTile(
-                        emoji: '🌙',
-                        title: 'Wellness',
-                        subtitle: 'Rest & Recovery',
-                        value: 'Prioritize sleep and hydration',
-                        onEdit: null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    if (_nutrition || _fitness || _mood || _wellness) ...[
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: const Color(0xFF333333),
-                            elevation: 0,
-                            side: const BorderSide(
-                                color: Color(0xFF333333), width: 1.5),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text('Track More Stuff'),
-                        ),
-                      ),
-                    ],
-
-                    if (!_nutrition && !_fitness && !_mood && !_wellness) ...[
-                      const SizedBox(height: 24),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.shade200),
-                        ),
-                        child: Text(
-                          'No lifestyle preferences selected. Update your preferences in settings to see personalized recommendations.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.amber.shade900,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
+                    // Cycle Phase Graph
+                    _buildCyclePhaseGraph(),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildDashboardTile({
-    required String emoji,
-    required String title,
-    required String subtitle,
-    required String value,
-    VoidCallback? onEdit,
-  }) {
+  Widget _buildPhaseProgressCard() {
+    int currentDay = _getCurrentCycleDay();
+    double progress = currentDay / _cycleLength;
+    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _getPhaseColor(_getCurrentPhase()),
+            _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getCurrentPhase(),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (phase != null)
+                      Text(
+                        phase.getDayRange(_cycleLength),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF666666),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                phase?.emoji ?? '🌙',
+                style: const TextStyle(fontSize: 50),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 12,
+              backgroundColor: Colors.white.withValues(alpha: 0.3),
+              valueColor: const AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Day $currentDay',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              Text(
+                '${(_cycleLength - currentDay)} days left',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF666666),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhaseDetailsCard() {
+    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+
+    if (phase == null) return const SizedBox.shrink();
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -689,60 +350,36 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 28)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF999999),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF999999),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (onEdit != null)
-                GestureDetector(
-                  onTap: onEdit,
-                  child: const Icon(
-                    Icons.edit,
-                    size: 20,
-                    color: Color(0xFF666666),
-                  ),
-                ),
-            ],
+          Text(
+            'Current Phase Details',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF333333),
+            ),
           ),
           const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
+          _buildDetailRow('🍎', 'Diet Type', phase.dietName),
+          const SizedBox(height: 8),
+          _buildDetailRow('🏋️', 'Workout Type', phase.workoutName),
+          const SizedBox(height: 8),
+          _buildDetailRow('⏱️', 'Fasting Type', phase.fastingType),
+          const SizedBox(height: 12),
+          Text(
+            'Energy Level',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF666666),
             ),
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF333333),
-                height: 1.4,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            phase.description,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF333333),
+              height: 1.5,
             ),
           ),
         ],
@@ -750,227 +387,403 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     );
   }
 
-  Widget _buildNutritionCircles() {
+  Widget _buildDetailRow(String emoji, String label, String value) {
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 18)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF999999),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF333333),
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCyclePhaseGraph() {
+    int currentDay = _getCurrentCycleDay();
+    
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hormonal Evolution',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF333333),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Hormonal curve graph
+          SizedBox(
+            height: 200,
+            child: CustomPaint(
+              painter: HormonalCurvePainter(
+                cycleLength: _cycleLength,
+                currentDay: currentDay,
+              ),
+              size: Size.infinite,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Phase labels
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildPhaseLabel('Menstrual', '1-5', _getPhaseColor('Menstrual')),
+              _buildPhaseLabel('Follicular', '6-12', _getPhaseColor('Follicular')),
+              _buildPhaseLabel('Ovulation', '13-15', _getPhaseColor('Ovulation')),
+              _buildPhaseLabel('Luteal', '16-28', _getPhaseColor('Luteal')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhaseLabel(String name, String days, Color color) {
+    return Column(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          name,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF333333),
+          ),
+        ),
+        Text(
+          days,
+          style: const TextStyle(
+            fontSize: 9,
+            color: Color(0xFF999999),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGoalsCard() {
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => NutritionMealsScreen(
-              dietType: _phaseData?.dietName ?? 'Balanced Nutrition',
-              phase: widget.phase,
-              date: widget.date,
-            ),
-          ),
+          MaterialPageRoute(builder: (context) => const ProfileScreen()),
         );
       },
       child: Container(
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: Colors.amber.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: Colors.amber.shade200),
         ),
-        child: Row(
-          children: [
-            Text('🍎', style: const TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nutrition',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF999999),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _phaseData?.dietName ?? 'Balanced diet',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF999999),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward,
-              size: 20,
-              color: Color(0xFF666666),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFitnessTile() {
-    return GestureDetector(
-      onTap: _showFitnessSuggestions,
-      child: Container(
-        padding: const EdgeInsets.all(16.0),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          children: [
-            Text('🏋️', style: const TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fitness',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF999999),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _phaseData?.workoutName ?? 'Moderate exercise',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF999999),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.arrow_forward,
-              size: 20,
-              color: Color(0xFF666666),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showFitnessSuggestions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Low-Impact Training',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close),
-                ),
-              ],
+            const Text(
+              '🎯 Your Goals',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF333333),
+              ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _fitnessExercises.length,
-                itemBuilder: (context, index) {
-                  String exercise = _fitnessExercises[index];
-                  bool isAdded = _trackedExercises.containsKey(exercise);
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (isAdded) {
-                            _trackedExercises.remove(exercise);
-                          } else {
-                            _trackedExercises[exercise] = false;
-                          }
-                        });
-                        _saveTrackedExercises();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: isAdded
-                              ? Colors.grey.shade200
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isAdded
-                                ? const Color(0xFF333333)
-                                : Colors.grey.shade300,
-                            width: isAdded ? 2 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              exercise,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF333333),
-                                decoration:
-                                    isAdded ? TextDecoration.none : null,
-                              ),
-                            ),
-                            if (isAdded)
-                              const Icon(
-                                Icons.check_circle,
-                                color: Color(0xFF333333),
-                                size: 24,
-                              )
-                            else
-                              const Icon(
-                                Icons.add_circle_outline,
-                                color: Color(0xFF999999),
-                                size: 24,
-                              ),
-                          ],
-                        ),
+            const SizedBox(height: 12),
+            if (_goals.isEmpty)
+              const Text(
+                'Tap to set your wellness goals',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF999999),
+                  fontStyle: FontStyle.italic,
+                ),
+              )
+            else
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: _goals.map((goal) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade200,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      goal.getDisplayString(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF333333),
                       ),
                     ),
                   );
-                },
+                }).toList(),
               ),
-            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Future<void> _saveTrackedExercises() async {
-    final prefs = await SharedPreferences.getInstance();
-    String dateKey = 'fitness_${widget.date.toIso8601String().split('T')[0]}';
-    if (_trackedExercises.isEmpty) {
-      await prefs.remove(dateKey);
-    } else {
-      String tracked =
-          _trackedExercises.entries.map((e) => '${e.key}:${e.value}').join(',');
-      await prefs.setString(dateKey, tracked);
+// Custom painter for hormonal evolution curve
+class HormonalCurvePainter extends CustomPainter {
+  final int cycleLength;
+  final int currentDay;
+
+  HormonalCurvePainter({
+    required this.cycleLength,
+    required this.currentDay,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final padding = 30.0;
+    final graphWidth = size.width - (padding * 2);
+    final graphHeight = size.height - (padding * 2);
+    final startX = padding;
+    final startY = padding;
+
+    // Draw phase backgrounds
+    final menstrualEnd = (5 / cycleLength) * graphWidth;
+    final follicularEnd = (12 / cycleLength) * graphWidth;
+    final ovulationEnd = (15 / cycleLength) * graphWidth;
+
+    _drawPhaseBackground(canvas, startX, startY, menstrualEnd, graphHeight, Color(0xFFFFE8E8));
+    _drawPhaseBackground(canvas, startX + menstrualEnd, startY, follicularEnd - menstrualEnd, graphHeight, Color(0xFFFFF5E1));
+    _drawPhaseBackground(canvas, startX + follicularEnd, startY, ovulationEnd - follicularEnd, graphHeight, Color(0xFFFFF0F7));
+    _drawPhaseBackground(canvas, startX + ovulationEnd, startY, graphWidth - ovulationEnd, graphHeight, Color(0xFFF5F0FF));
+
+    // Draw grid lines
+    for (int i = 1; i < 4; i++) {
+      final y = startY + (graphHeight * i / 4);
+      canvas.drawLine(
+        Offset(startX, y),
+        Offset(startX + graphWidth, y),
+        Paint()
+          ..color = Colors.grey.shade200
+          ..strokeWidth = 0.5,
+      );
     }
+
+    // Draw phase dividers
+    for (final x in [menstrualEnd, follicularEnd, ovulationEnd]) {
+      canvas.drawLine(
+        Offset(startX + x, startY),
+        Offset(startX + x, startY + graphHeight),
+        Paint()
+          ..color = Colors.grey.shade300
+          ..strokeWidth = 1,
+      );
+    }
+
+    // Draw curves with smooth bezier paths
+    _drawSmoothCurve(
+      canvas,
+      startX,
+      startY,
+      graphWidth,
+      graphHeight,
+      _getEstrogen,
+      Color(0xFFE91E63),
+      'Estrogen',
+    );
+
+    _drawSmoothCurve(
+      canvas,
+      startX,
+      startY,
+      graphWidth,
+      graphHeight,
+      _getProgesterone,
+      Color(0xFFFFA500),
+      'Progesterone',
+    );
+
+    // Draw current day vertical line
+    final currentX = startX + (currentDay / cycleLength) * graphWidth;
+    canvas.drawLine(
+      Offset(currentX, startY),
+      Offset(currentX, startY + graphHeight),
+      Paint()
+        ..color = Color(0xFF333333).withValues(alpha: 0.4)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // Draw axes
+    canvas.drawLine(
+      Offset(startX, startY + graphHeight),
+      Offset(startX + graphWidth, startY + graphHeight),
+      Paint()
+        ..color = Colors.grey.shade400
+        ..strokeWidth = 1.5,
+    );
+
+    canvas.drawLine(
+      Offset(startX, startY),
+      Offset(startX, startY + graphHeight),
+      Paint()
+        ..color = Colors.grey.shade400
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  void _drawPhaseBackground(Canvas canvas, double x, double y, double width, double height, Color color) {
+    canvas.drawRect(
+      Rect.fromLTWH(x, y, width, height),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  void _drawSmoothCurve(
+    Canvas canvas,
+    double startX,
+    double startY,
+    double graphWidth,
+    double graphHeight,
+    Function(int) getValue,
+    Color color,
+    String label,
+  ) {
+    final path = Path();
+    final areaPath = Path();
+    final points = <Offset>[];
+
+    // Generate points
+    for (int day = 1; day <= cycleLength; day++) {
+      final x = startX + (day / cycleLength) * graphWidth;
+      final value = getValue(day);
+      final y = startY + graphHeight - (value * graphHeight);
+      points.add(Offset(x, y));
+    }
+
+    // Draw area under curve with gradient
+    areaPath.moveTo(points.first.dx, startY + graphHeight);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      areaPath.quadraticBezierTo(
+        (p1.dx + p2.dx) / 2,
+        (p1.dy + p2.dy) / 2,
+        p2.dx,
+        p2.dy,
+      );
+    }
+    areaPath.lineTo(points.last.dx, startY + graphHeight);
+    areaPath.close();
+
+    canvas.drawPath(
+      areaPath,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.3),
+            color.withValues(alpha: 0.05),
+          ],
+        ).createShader(areaPath.getBounds()),
+    );
+
+    // Draw curve line
+    for (int i = 0; i < points.length - 1; i++) {
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      path.quadraticBezierTo(
+        (p1.dx + p2.dx) / 2,
+        (p1.dy + p2.dy) / 2,
+        p2.dx,
+        p2.dy,
+      );
+      if (i == 0) {
+        path.moveTo(p1.dx, p1.dy);
+      }
+    }
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // Draw dots on curve
+    for (final point in points) {
+      canvas.drawCircle(
+        point,
+        2,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill,
+      );
+    }
+  }
+
+  // Estrogen pattern: low in menstrual, rises in follicular, peaks at ovulation, drops in luteal
+  double _getEstrogen(int day) {
+    if (day >= 1 && day <= 5) return 0.2; // Menstrual: low
+    if (day >= 6 && day <= 12) return 0.2 + (day - 6) * 0.1; // Follicular: rising
+    if (day >= 13 && day <= 15) return 0.8; // Ovulation: peak
+    if (day >= 16 && day <= 28) return 0.8 - (day - 15) * 0.025; // Luteal: declining
+    return 0.2;
+  }
+
+  // Progesterone pattern: low until ovulation, then rises in luteal
+  double _getProgesterone(int day) {
+    if (day >= 1 && day <= 14) return 0.1; // Low until ovulation
+    if (day >= 15 && day <= 21) return 0.1 + (day - 14) * 0.08; // Rising in luteal
+    if (day >= 22 && day <= 28) return 0.7 - (day - 21) * 0.1; // Declining
+    return 0.1;
+  }
+
+  @override
+  bool shouldRepaint(HormonalCurvePainter oldDelegate) {
+    return oldDelegate.currentDay != currentDay;
   }
 }

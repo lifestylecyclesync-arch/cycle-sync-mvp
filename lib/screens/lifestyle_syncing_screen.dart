@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/cycle_utils.dart';
 import '../models/phase.dart';
+import 'fitness_suggestions_screen.dart';
 
 class LifestyleSyncingScreen extends StatefulWidget {
   final DateTime lastPeriodStart;
@@ -27,6 +28,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
   // Customized suggestions
   String _nutritionSuggestion = '';
   String _fitnessSuggestion = '';
+  List<String> _selectedWorkouts = [];
   String _fastingSuggestion = '';
 
   @override
@@ -41,13 +43,21 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
 
   Future<void> _loadCustomizations() async {
     final prefs = await SharedPreferences.getInstance();
+    String todayKey = _today.toIso8601String().split('T')[0];
+    
     setState(() {
       _nutritionSuggestion = prefs.getString('nutrition_suggestion') ??
           _currentPhaseData?.dietName ??
           'Balanced diet';
-      _fitnessSuggestion = prefs.getString('fitness_suggestion') ??
-          _currentPhaseData?.workoutName ??
-          'Moderate exercise';
+      // Load today's fitness workouts (date-specific, multiple selections)
+      final fitnessData = prefs.getString('fitness_$todayKey');
+      if (fitnessData != null && fitnessData.isNotEmpty) {
+        _selectedWorkouts = fitnessData.split(',');
+        _fitnessSuggestion = _selectedWorkouts.join(', ');
+      } else {
+        _selectedWorkouts = [];
+        _fitnessSuggestion = _currentPhaseData?.workoutName ?? 'Moderate exercise';
+      }
       _fastingSuggestion = prefs.getString('fasting_suggestion') ??
           _getDefaultFastingForPhase(_currentPhase) ??
           'IF 16';
@@ -83,14 +93,57 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Edit $title'),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: 'Enter $title suggestion',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (key == 'fitness_suggestion') ...[
+              Text(
+                'Recommended for ${_currentPhase} phase:',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF999999),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Text(
+                  _currentPhaseData?.workoutName ?? 'Moderate exercise',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Or customize:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF999999),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                hintText: 'Enter $title suggestion',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
         actions: [
           TextButton(
@@ -129,39 +182,49 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              // Header with Cycle Day and Phase
+              // Header with Cycle Day and Phase - Standardized Gradient Styling
               Container(
                 padding: const EdgeInsets.all(20.0),
                 margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      getPhaseColor(_currentPhase).withValues(alpha: 0.3),
+                      getPhaseColor(_currentPhase).withValues(alpha: 0.15),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Day $_currentCycleDay — ${_currentPhase} ${_currentPhaseData?.emoji ?? ''}',
+                      'Day $_currentCycleDay • ${_currentPhaseData?.emoji ?? ''} ${_currentPhase} phase',
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 22,
                         color: Color(0xFF333333),
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
-                      _currentPhaseData?.getDayRange(widget.cycleLength) ?? 'Days 1–28',
+                      '${_currentPhaseData?.getDayRange(widget.cycleLength) ?? 'Days 1–28'} • ${_currentPhaseData?.workoutName ?? 'Unknown'}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF666666),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Lifestyle Syncing',
                       style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF333333),
+                        fontSize: 12,
+                        color: Color(0xFF999999),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -180,7 +243,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                         title: 'Nutrition',
                         suggestion: _nutritionSuggestion,
                         onEdit: () => _showEditDialog(
-                          'Nutrition',
+                          _currentPhaseData?.dietName ?? 'Nutrition',
                           _nutritionSuggestion,
                           'nutrition_suggestion',
                         ),
@@ -192,11 +255,19 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                         emoji: '🏋️',
                         title: 'Fitness',
                         suggestion: _fitnessSuggestion,
-                        onEdit: () => _showEditDialog(
-                          'Fitness',
-                          _fitnessSuggestion,
-                          'fitness_suggestion',
-                        ),
+                        onEdit: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FitnessSuggestionsScreen(
+                              workoutType: _currentPhaseData?.workoutName ?? 'Fitness',
+                              phase: _currentPhase,
+                              date: _today,
+                            ),
+                          ),
+                        ).then((_) {
+                          // Reload fitness suggestion after returning
+                          _loadCustomizations();
+                        }),
                       ),
                       const SizedBox(height: 15),
 
@@ -290,6 +361,15 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Tap to customize →',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF666666),
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
             ),

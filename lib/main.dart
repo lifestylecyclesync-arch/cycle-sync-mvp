@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/onboarding_welcome_screen.dart';
 import 'screens/onboarding_cycle_input_screen.dart';
 import 'screens/onboarding_lifestyle_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   runApp(const CycleSyncApp());
@@ -49,7 +49,7 @@ class CycleSyncApp extends StatelessWidget {
       routes: {
         '/cycleBasics': (context) => const OnboardingCycleInputScreen(),
         '/lifestylePreferences': (context) => const OnboardingLifestyleScreen(),
-        '/dashboard': (context) => const DashboardScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }

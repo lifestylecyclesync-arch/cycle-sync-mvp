@@ -14,12 +14,12 @@ import 'package:flutter/material.dart';
 /// - "Early Luteal"
 /// - "Luteal"
 /// 
-/// Phase ranges scale proportionally to cycle length:
-/// - Menstrual: Days 1–5 (fixed)
-/// - Follicular: Days 6 until ~45% of cycle length
-/// - Ovulation: ~45% to ~60% of cycle length (fertile window)
-/// - Early Luteal: ~60% to ~75% of cycle length
-/// - Luteal: ~75% to end of cycle
+/// Phase ranges scale proportionally to cycle length (Dr. Mindy Pelz framework):
+/// - Menstrual: 0% to 17.9% (Days 1–5 for 28-day cycle)
+/// - Follicular: 17.9% to 42.9% (Days 6–12 for 28-day cycle)
+/// - Ovulation: 42.9% to 53.6% (Days 13–15 for 28-day cycle)
+/// - Early Luteal: 53.6% to 71.4% (Days 16–20 for 28-day cycle)
+/// - Luteal: 71.4% to 100% (Days 20–28 for 28-day cycle)
 String getCyclePhase(
   DateTime lastPeriodStart,
   int cycleLength,
@@ -27,33 +27,35 @@ String getCyclePhase(
 ) {
   // Calculate which day of the cycle we're on (1-based)
   int dayOfCycle = (today.difference(lastPeriodStart).inDays % cycleLength) + 1;
+  double cycleProgress = dayOfCycle / cycleLength;
 
-  // Fixed menstrual phase (days 1-5)
-  if (dayOfCycle <= 5) {
+  // Calculate proportional boundaries
+  const double menstrualEnd = 0.179;
+  const double follicularEnd = 0.429;
+  const double ovulationEnd = 0.536;
+  const double earlyLutealEnd = 0.714;
+
+  // Menstrual phase: 0% to 17.9%
+  if (cycleProgress <= menstrualEnd) {
     return 'Menstrual';
   }
 
-  // Calculate proportional boundaries
-  double follicularEnd = cycleLength * 0.45;
-  double ovulationEnd = cycleLength * 0.60;
-  double earlyLutealEnd = cycleLength * 0.75;
-
-  // Follicular phase: day 6 until ~45% of cycle
-  if (dayOfCycle <= follicularEnd) {
+  // Follicular phase: 17.9% to 42.9%
+  if (cycleProgress <= follicularEnd) {
     return 'Follicular';
   }
 
-  // Ovulation phase: ~45% to ~60% of cycle
-  if (dayOfCycle <= ovulationEnd) {
+  // Ovulation phase: 42.9% to 53.6%
+  if (cycleProgress <= ovulationEnd) {
     return 'Ovulation';
   }
 
-  // Early Luteal phase: ~60% to ~75% of cycle
-  if (dayOfCycle <= earlyLutealEnd) {
+  // Early Luteal phase: 53.6% to 71.4%
+  if (cycleProgress <= earlyLutealEnd) {
     return 'Early Luteal';
   }
 
-  // Luteal phase: ~75% to end of cycle
+  // Luteal phase: 71.4% to 100%
   return 'Luteal';
 }
 

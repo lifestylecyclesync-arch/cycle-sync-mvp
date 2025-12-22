@@ -193,6 +193,15 @@ class _OnboardingCycleInputScreenState extends State<OnboardingCycleInputScreen>
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/lifestylePreferences');
+                    },
+                    child: const Text('Skip',
+                      style: TextStyle(color: Color(0xFF666666)),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -218,16 +227,12 @@ class _OnboardingCycleInputScreenState extends State<OnboardingCycleInputScreen>
                         foregroundColor: const Color(0xFF333333),
                         elevation: 0,
                         side: const BorderSide(color: Color(0xFF333333), width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Continue'),
+                      child: const Text('Next',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushNamed('/lifestylePreferences');
-                    },
-                    child: const Text('Skip for now'),
                   ),
                 ],
               ),
