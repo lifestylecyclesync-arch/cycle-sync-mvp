@@ -6,7 +6,9 @@ import '../utils/avatar_manager.dart';
 import '../utils/goal_manager.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final bool openGoalDialog;
+  
+  const ProfileScreen({super.key, this.openGoalDialog = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -35,6 +37,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _userNameController = TextEditingController();
     _loadUserData();
+    
+    if (widget.openGoalDialog) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showEditGoalsDialog();
+      });
+    }
   }
 
   @override
@@ -43,6 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  /// Load all user data including goals
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final symptomsJson = prefs.getString('userSymptoms');
@@ -65,6 +74,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _selectedAvatar = avatar;
     });
+  }
+
+  /// Load all goals (used for sync across screens)
+  Future<void> _loadGoals() async {
+    try {
+      final goals = await GoalManager.getAllGoals();
+      setState(() {
+        _goals = goals;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Goals not loaded. Tap to refresh.')),
+        );
+      }
+    }
   }
 
   Future<void> _saveUserData() async {
@@ -225,23 +250,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Your Goals',
+                            '🎯 Your Goals',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF999999),
+                              color: Color(0xFF333333),
                             ),
                           ),
-                          GestureDetector(
-                            onTap: _showEditGoalsDialog,
-                            child: Icon(Icons.add, color: Colors.pink.shade400, size: 20),
-                          ),
+                          if (_goals.isNotEmpty)
+                            Text(
+                              '${_goals.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.pink.shade400,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       if (_goals.isEmpty)
                         const Text(
-                          'No goals set yet. Tap + to add your first goal!',
+                          'No goals set yet. Tap + to add…',
                           style: TextStyle(
                             fontSize: 13,
                             color: Color(0xFF999999),
@@ -251,55 +281,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       else
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _goals.map((goal) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12.0),
+                          children: [
+                            ..._buildGroupedGoals(),
+                            const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: _showCreateGoalDialog,
                               child: Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: Colors.green.shade100,
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.pink.shade200),
+                                  border: Border.all(color: Colors.green.shade400, width: 1),
                                 ),
                                 child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            goal.name,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFF333333),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            goal.getDisplayString(),
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Color(0xFF666666),
-                                              fontWeight: FontWeight.w400,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () => _showDeleteGoalConfirm(goal.id),
-                                      child: Icon(
-                                        Icons.close,
-                                        color: Colors.pink.shade300,
-                                        size: 18,
+                                    Icon(Icons.add, size: 14, color: Colors.green.shade700),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Add Goal',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green.shade700,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            );
-                          }).toList(),
+                            ),
+                          ],
                         ),
                     ],
                   ),
@@ -559,24 +570,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, Map<String, dynamic>> _getGoalFieldConfig() {
     return {
       'exercise': {
+        'requiresFrequency': true,
         'fields': [
           {'key': 'duration', 'label': 'Duration', 'hint': 'e.g., 30 minutes', 'type': 'text'},
           {'key': 'exerciseType', 'label': 'Type of Exercise', 'type': 'toggleList', 'options': ['Running', 'Yoga', 'Strength', 'Swimming', 'Cycling', 'Walking']},
         ],
       },
       'water': {
+        'requiresFrequency': false,
         'fields': [
           {'key': 'amount', 'label': 'Amount per Day', 'hint': 'e.g., 2 liters, 8 glasses', 'type': 'text'},
           {'key': 'note', 'label': 'Note (optional)', 'hint': 'e.g., With lemon', 'type': 'text'},
         ],
       },
       'sleep': {
+        'requiresFrequency': false,
         'fields': [
           {'key': 'hours', 'label': 'Hours per Night', 'hint': 'e.g., 8', 'type': 'text'},
           {'key': 'note', 'label': 'Note (optional)', 'hint': 'e.g., Before 10 PM', 'type': 'text'},
         ],
       },
       'meditation': {
+        'requiresFrequency': true,
         'fields': [
           {'key': 'duration', 'label': 'Duration', 'hint': 'e.g., 10 minutes', 'type': 'text'},
           {'key': 'meditationType', 'label': 'Type', 'type': 'toggleList', 'options': ['Guided', 'Breathing', 'Body Scan', 'Visualization']},
@@ -584,12 +599,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       },
       'nutrition': {
+        'requiresFrequency': false,
         'fields': [
           {'key': 'dietType', 'label': 'Diet Type', 'type': 'toggleListWithCustom', 'options': ['Low Carb', 'Keto', 'No Sugar', 'High Protein', 'Vegan', 'Balanced']},
           {'key': 'focusArea', 'label': 'Focus Area (optional)', 'hint': 'e.g., Vegetables, Proteins', 'type': 'text'},
         ],
       },
       'weightloss': {
+        'requiresFrequency': false,
         'fields': [
           {'key': 'amount', 'label': 'Target Weight', 'hint': 'e.g., 5', 'type': 'text'},
           {'key': 'unit', 'label': 'Unit', 'type': 'toggleList', 'options': ['kg', 'lbs', 'stones', 'pounds']},
@@ -597,6 +614,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       },
       'wellness': {
+        'requiresFrequency': true,
         'fields': [
           {'key': 'activity', 'label': 'Activity', 'hint': 'e.g., Cold shower, Journal', 'type': 'text'},
           {'key': 'duration', 'label': 'Duration/Details (optional)', 'hint': 'e.g., 5 minutes', 'type': 'text'},
@@ -605,16 +623,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
     };
   }
 
-  void _showEditGoalsDialog() {
-    String selectedType = 'exercise';
-    String selectedFrequency = 'weekly';
-    int frequencyValue = 3;
+  void _showEditGoalDialog(Goal existingGoal) {
+    // Parse the goal data to reconstruct the form state
+    String selectedType = existingGoal.type;
+    String selectedFrequency = existingGoal.frequency;
+    int frequencyValue = existingGoal.frequencyValue;
     Map<String, String> fieldValues = {};
     Map<String, String> selectedToggles = {};
 
+    // Parse description and amount to reconstruct field values
+    final parts = <String>[];
+    if (existingGoal.amount.isNotEmpty) {
+      parts.add(existingGoal.amount);
+    }
+    if (existingGoal.description.isNotEmpty) {
+      parts.addAll(existingGoal.description.split(', '));
+    }
+
+    // Get the field config for the goal type
+    final fieldConfig = _getGoalFieldConfig();
+    final goalConfig = fieldConfig[selectedType];
+    
+    if (goalConfig != null) {
+      final fields = goalConfig['fields'] as List<Map<String, dynamic>>;
+      
+      // Try to match parts to fields
+      int partIndex = 0;
+      for (var field in fields) {
+        if (partIndex >= parts.length) break;
+        
+        final key = field['key'] as String;
+        final type = field['type'] as String;
+        
+        if (type == 'text') {
+          fieldValues[key] = parts[partIndex];
+          partIndex++;
+        } else if (type == 'toggleList' || type == 'toggleListWithCustom') {
+          final options = (field['options'] as List<String>?) ?? [];
+          final part = parts[partIndex];
+          if (options.contains(part)) {
+            selectedToggles[key] = part;
+            fieldValues[key] = part;
+          } else {
+            fieldValues[key] = part;
+          }
+          partIndex++;
+        }
+      }
+    }
+
     final typeOptions = ['exercise', 'water', 'sleep', 'meditation', 'nutrition', 'weightloss', 'wellness'];
     final frequencyOptions = ['daily', 'weekly', 'monthly'];
-    final fieldConfig = _getGoalFieldConfig();
     
     showDialog(
       context: context,
@@ -622,9 +681,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context, setState) {
           final currentConfig = fieldConfig[selectedType]!;
           final fields = currentConfig['fields'] as List<Map<String, dynamic>>;
+          final requiresFrequency = currentConfig['requiresFrequency'] as bool? ?? false;
           
           return AlertDialog(
-            title: const Text('Add New Goal'),
+            title: const Text('Edit Goal'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -660,62 +720,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-                  // Frequency
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Frequency',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButton<String>(
-                          value: selectedFrequency,
-                          isExpanded: true,
-                          items: frequencyOptions.map((freq) {
-                            return DropdownMenuItem(
-                              value: freq,
-                              child: Text('${freq[0].toUpperCase()}${freq.substring(1)}'),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() => selectedFrequency = value ?? selectedFrequency);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Frequency Value
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'How many times per $selectedFrequency?',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            hintText: 'e.g., 3',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  // Frequency - only show if required for this goal type
+                  if (requiresFrequency) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Frequency',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
                           ),
-                          onChanged: (value) {
-                            setState(() => frequencyValue = int.tryParse(value) ?? 1);
-                          },
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          DropdownButton<String>(
+                            value: selectedFrequency,
+                            isExpanded: true,
+                            items: frequencyOptions.map((freq) {
+                              return DropdownMenuItem(
+                                value: freq,
+                                child: Text('${freq[0].toUpperCase()}${freq.substring(1)}'),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() => selectedFrequency = value ?? selectedFrequency);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    // Frequency Value - only show if frequency is required
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'How many times per $selectedFrequency?',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            keyboardType: TextInputType.number,
+                            controller: TextEditingController(text: frequencyValue.toString()),
+                            decoration: InputDecoration(
+                              hintText: 'e.g., 3',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onChanged: (value) {
+                              setState(() => frequencyValue = int.tryParse(value) ?? 1);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   // Dynamic Fields
                   ...fields.map((field) {
                     final key = field['key'] as String;
                     final label = field['label'] as String;
                     final type = field['type'] as String;
+                    final initialValue = fieldValues[key] ?? '';
                     
                     if (type == 'text') {
                       final hint = field['hint'] as String? ?? '';
@@ -730,6 +794,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 8),
                             TextField(
+                              controller: TextEditingController(text: initialValue),
                               decoration: InputDecoration(
                                 hintText: hint,
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -780,6 +845,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     } else if (type == 'toggleListWithCustom') {
                       final options = (field['options'] as List<String>?) ?? [];
+                      final isCustom = !options.contains(initialValue);
+                      final customValue = isCustom ? initialValue : '';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16.0),
                         child: Column(
@@ -816,6 +883,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 12),
                             TextField(
+                              controller: TextEditingController(text: customValue),
                               decoration: InputDecoration(
                                 labelText: 'Or enter custom diet type',
                                 hintText: 'e.g., Paleo, Mediterranean',
@@ -845,46 +913,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   // Build the amount and description from field values
                   String amount = '';
                   String description = '';
+                  bool amountSet = false;
                   
                   for (var field in fields) {
                     final key = field['key'] as String;
                     final value = fieldValues[key] ?? '';
                     
-                    if (key == 'duration' || key == 'amount' || key == 'hours' || key == 'timeRange' || key == 'activity') {
+                    if (value.isEmpty) continue;
+                    
+                    // First non-empty value becomes amount
+                    if (!amountSet) {
                       amount = value;
+                      amountSet = true;
                     } else {
+                      // Everything else goes to description
                       description += (description.isEmpty ? '' : ', ') + value;
                     }
                   }
                   
                   if (amount.isNotEmpty) {
-                    final newGoal = Goal(
-                      id: GoalManager.generateId(),
-                      name: '${selectedType[0].toUpperCase()}${selectedType.substring(1)}',
+                    final updatedGoal = Goal(
+                      id: existingGoal.id,
+                      name: existingGoal.name,
                       type: selectedType,
                       frequency: selectedFrequency,
                       frequencyValue: frequencyValue,
                       amount: amount,
                       description: description,
+                      completedDates: existingGoal.completedDates,
                     );
                     
-                    GoalManager.addGoal(newGoal).then((_) {
-                      this.setState(() {
-                        _goals.add(newGoal);
-                      });
-                      Navigator.pop(context);
-                    });
+                    await GoalManager.updateGoal(updatedGoal);
+                    await _loadGoals(); // Sync across all screens
+                    
+                    // If opened from dashboard, pop to return to dashboard
+                    if (widget.openGoalDialog) {
+                      if (mounted) {
+                        Navigator.pop(context); // Close dialog
+                        Navigator.pop(context); // Return to dashboard
+                      }
+                    } else {
+                      if (mounted) {
+                        Navigator.pop(context); // Just close dialog
+                      }
+                    }
                   }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.pink.shade400,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Add Goal'),
+                child: const Text('Save Changes'),
               ),
             ],
           );
@@ -893,33 +976,630 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showDeleteGoalConfirm(String goalId) async {
-    return showDialog(
+  /// Group goals by type for display
+  Map<String, List<Goal>> _getGoalsByType() {
+    final groupedGoals = <String, List<Goal>>{};
+    for (final goal in _goals) {
+      if (!groupedGoals.containsKey(goal.type)) {
+        groupedGoals[goal.type] = [];
+      }
+      groupedGoals[goal.type]!.add(goal);
+    }
+    return groupedGoals;
+  }
+
+  /// Build grouped goal widgets
+  List<Widget> _buildGroupedGoals() {
+    final groupedGoals = _getGoalsByType();
+    final List<Widget> widgets = [];
+
+    for (final type in groupedGoals.keys) {
+      final goals = groupedGoals[type]!;
+
+      // Type header
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Text(
+            _getGoalTypeLabel(type),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      );
+
+      // Goals in this type
+      for (final goal in goals) {
+        widgets.add(_buildGoalItem(goal));
+      }
+
+      widgets.add(const SizedBox(height: 12));
+    }
+
+    return widgets;
+  }
+
+  /// Build individual goal item with shortcuts
+  Widget _buildGoalItem(Goal goal) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10.0),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.pink.shade200),
+        ),
+        child: Row(
+          children: [
+            // Goal details (tappable for details view)
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  _showGoalDetailsDialog(goal);
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      goal.name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF333333),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      goal.getDisplayString(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF666666),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Edit button
+            GestureDetector(
+              onTap: () => _showEditGoalDialog(goal),
+              child: Icon(
+                Icons.edit,
+                color: Colors.blue.shade400,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Delete button
+            GestureDetector(
+              onTap: () => _showDeleteGoalConfirm(goal.id),
+              child: Icon(
+                Icons.close,
+                color: Colors.red.shade400,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get display label for goal type
+  String _getGoalTypeLabel(String type) {
+    final labels = {
+      'exercise': '💪 Exercise',
+      'water': '💧 Water',
+      'sleep': '😴 Sleep',
+      'meditation': '🧘 Meditation',
+      'nutrition': '🥗 Nutrition',
+      'weightloss': '⚖️ Weight Loss',
+      'wellness': '✨ Wellness',
+    };
+    return labels[type] ?? type;
+  }
+
+  /// Show goal details dialog
+  void _showGoalDetailsDialog(Goal goal) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Goal?'),
-        content: const Text('Are you sure you want to delete this goal?'),
+        title: Text(goal.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Type: ${_getGoalTypeLabel(goal.type)}'),
+            if (goal.frequency.isNotEmpty) Text('Frequency: ${goal.frequency}'),
+            if (goal.frequencyValue > 0) Text('Times per period: ${goal.frequencyValue}'),
+            if (goal.amount.isNotEmpty) Text('Amount: ${goal.amount}'),
+            if (goal.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text('Description: ${goal.description}'),
+              ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showEditGoalDialog(goal);
+            },
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditGoalsDialog() {
+    _showCreateGoalDialog();
+  }
+
+  void _showCreateGoalDialog() {
+    int currentStep = 0;
+    String selectedType = 'exercise';
+    String selectedFrequency = 'weekly';
+    int frequencyValue = 3;
+    Map<String, String> fieldValues = {};
+    Map<String, String> selectedToggles = {};
+
+    final typeOptions = ['exercise', 'water', 'sleep', 'meditation', 'nutrition', 'weightloss', 'wellness'];
+    final frequencyOptions = ['daily', 'weekly', 'monthly'];
+    final fieldConfig = _getGoalFieldConfig();
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final currentConfig = fieldConfig[selectedType]!;
+          final fields = currentConfig['fields'] as List<Map<String, dynamic>>;
+          final requiresFrequency = currentConfig['requiresFrequency'] as bool? ?? false;
+          
+          // Determine total steps
+          int totalSteps = 2; // Type + Details
+          if (requiresFrequency) totalSteps = 3; // Type + Frequency + Details
+          
+          return AlertDialog(
+            title: Text('Add New Goal (Step ${currentStep + 1}/$totalSteps)'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Step 1: Select Goal Type
+                  if (currentStep == 0) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'What type of goal would you like to set?',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButton<String>(
+                            value: selectedType,
+                            isExpanded: true,
+                            items: typeOptions.map((type) {
+                              return DropdownMenuItem(
+                                value: type,
+                                child: Text('${type[0].toUpperCase()}${type.substring(1)}'),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                selectedType = value ?? selectedType;
+                                fieldValues.clear();
+                                selectedToggles.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // Step 2: Select Frequency (if required)
+                  if (requiresFrequency && currentStep == 1) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'How often do you want to do this?',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButton<String>(
+                            value: selectedFrequency,
+                            isExpanded: true,
+                            items: frequencyOptions.map((freq) {
+                              return DropdownMenuItem(
+                                value: freq,
+                                child: Text('${freq[0].toUpperCase()}${freq.substring(1)}'),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() => selectedFrequency = value ?? selectedFrequency);
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'How many times per $selectedFrequency?',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            keyboardType: TextInputType.number,
+                            controller: TextEditingController(text: frequencyValue.toString()),
+                            decoration: InputDecoration(
+                              hintText: 'e.g., 3',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onChanged: (value) {
+                              setState(() => frequencyValue = int.tryParse(value) ?? 1);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // Final Step: Add Details
+                  if (currentStep == (requiresFrequency ? 2 : 1)) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Add details about your goal',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+                          ),
+                          const SizedBox(height: 16),
+                          ...fields.map((field) {
+                            final key = field['key'] as String;
+                            final label = field['label'] as String;
+                            final type = field['type'] as String;
+                            
+                            if (type == 'text') {
+                              final hint = field['hint'] as String? ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextField(
+                                      decoration: InputDecoration(
+                                        hintText: hint,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      onChanged: (value) {
+                                        setState(() => fieldValues[key] = value);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            } else if (type == 'toggleList') {
+                              final options = (field['options'] as List<String>?) ?? [];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: options.map((option) {
+                                        final isSelected = selectedToggles[key] == option;
+                                        return FilterChip(
+                                          label: Text(option),
+                                          selected: isSelected,
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              if (selected) {
+                                                selectedToggles[key] = option;
+                                                fieldValues[key] = option;
+                                              } else {
+                                                selectedToggles.remove(key);
+                                                fieldValues.remove(key);
+                                              }
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            } else if (type == 'toggleListWithCustom') {
+                              final options = (field['options'] as List<String>?) ?? [];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        ...options.map((option) {
+                                          final isSelected = selectedToggles[key] == option;
+                                          return FilterChip(
+                                            label: Text(option),
+                                            selected: isSelected,
+                                            onSelected: (selected) {
+                                              setState(() {
+                                                if (selected) {
+                                                  selectedToggles[key] = option;
+                                                  fieldValues[key] = option;
+                                                } else {
+                                                  selectedToggles.remove(key);
+                                                  fieldValues.remove(key);
+                                                }
+                                              });
+                                            },
+                                          );
+                                        }).toList(),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      decoration: InputDecoration(
+                                        labelText: 'Or enter custom diet type',
+                                        hintText: 'e.g., Paleo, Mediterranean',
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          if (value.isNotEmpty) {
+                                            selectedToggles[key] = value;
+                                            fieldValues[key] = value;
+                                          }
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            return SizedBox.shrink();
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              if (currentStep > 0)
+                TextButton(
+                  onPressed: () {
+                    setState(() => currentStep--);
+                  },
+                  child: const Text('Back'),
+                ),
+              if (currentStep < totalSteps - 1)
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => currentStep++);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink.shade400,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Next'),
+                ),
+              if (currentStep == totalSteps - 1)
+                ElevatedButton(
+                  onPressed: () async {
+                    // Build the amount and description from field values
+                    String amount = '';
+                    String description = '';
+                    bool amountSet = false;
+                    
+                    for (var field in fields) {
+                      final key = field['key'] as String;
+                      final value = fieldValues[key] ?? '';
+                      
+                      if (value.isEmpty) continue;
+                      
+                      if (!amountSet) {
+                        amount = value;
+                        amountSet = true;
+                      } else {
+                        description += (description.isEmpty ? '' : ', ') + value;
+                      }
+                    }
+                    
+                    if (amount.isNotEmpty) {
+                      final newGoal = Goal(
+                        id: GoalManager.generateId(),
+                        name: '${selectedType[0].toUpperCase()}${selectedType.substring(1)}',
+                        type: selectedType,
+                        frequency: selectedFrequency,
+                        frequencyValue: frequencyValue,
+                        amount: amount,
+                        description: description,
+                      );
+                      
+                      await GoalManager.addGoal(newGoal);
+                      await _loadGoals(); // Sync across all screens
+                      
+                      if (mounted) {
+                        if (widget.openGoalDialog) {
+                          Navigator.pop(context);
+                          Navigator.pop(context);
+                        } else {
+                          Navigator.pop(context);
+                        }
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink.shade400,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Create Goal'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showDeleteGoalConfirm(String goalId) async {
+    final goal = _goals.firstWhere((g) => g.id == goalId);
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete Goal?',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF333333),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You\'re about to delete:',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF999999),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.pink.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.pink.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    goal.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  if (goal.amount.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        goal.amount,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF666666),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This action cannot be undone. All progress for this goal will be deleted.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF999999),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF666666),
+              ),
+            ),
           ),
           ElevatedButton(
-            onPressed: () {
-              GoalManager.deleteGoal(goalId).then((_) {
-                setState(() {
-                  _goals.removeWhere((g) => g.id == goalId);
-                });
-              });
-              Navigator.pop(context);
+            onPressed: () async {
+              await GoalManager.deleteGoal(goalId);
+              await _loadGoals(); // Sync across all screens
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${goal.name} deleted'),
+                    duration: const Duration(seconds: 2),
+                    backgroundColor: Colors.pink.shade400,
+                  ),
+                );
+                Navigator.pop(context);
+                
+                // If opened from dashboard, also pop the profile screen to return to dashboard
+                if (widget.openGoalDialog) {
+                  Navigator.pop(context);
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.pink.shade400,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: const Text('Delete'),
+            child: const Text(
+              'Delete Goal',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
     );
   }

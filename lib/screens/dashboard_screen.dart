@@ -22,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   List<Goal> _goals = [];
   int _avatarRefreshKey = 0; // Trigger FutureBuilder refresh
+  bool _expandedGoals = false; // Track if goals are expanded
 
   @override
   void initState() {
@@ -33,10 +34,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh avatar when returning to this screen
+    // Refresh avatar and goals when returning to this screen
     setState(() {
       _avatarRefreshKey++;
     });
+    _loadGoals(); // Reload goals when coming back from profile
   }
 
   Future<void> _loadCycleData() async {
@@ -162,11 +164,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           GestureDetector(
-                            onTap: () {
-                              Navigator.push(
+                            onTap: () async {
+                              await Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (context) => const ProfileScreen()),
                               );
+                              // Reload goals when returning from profile screen
+                              await _loadGoals();
                             },
                             child: FutureBuilder<List<Object>>(
                               key: ValueKey(_avatarRefreshKey),
@@ -503,12 +507,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildGoalsCard() {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfileScreen()),
-        );
-      },
+      onTap: _goals.isEmpty
+          ? () async {
+              // Empty state: open add goal dialog
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(openGoalDialog: true),
+                ),
+              );
+              await _loadGoals();
+            }
+          : () async {
+              // Full module list view
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(openGoalDialog: false),
+                ),
+              );
+              await _loadGoals();
+            },
       child: Container(
         padding: const EdgeInsets.all(16.0),
         decoration: BoxDecoration(
@@ -519,13 +538,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '🎯 Your Goals',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF333333),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '🎯 Your Goals',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                if (_goals.isNotEmpty)
+                  Text(
+                    '${_goals.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber.shade700,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             if (_goals.isEmpty)
@@ -538,30 +571,371 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )
             else
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: _goals.map((goal) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade200,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      goal.getDisplayString(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF333333),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Goal badges (limited to 3 or all if expanded)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ..._goals
+                          .take(_expandedGoals ? _goals.length : 3)
+                          .map((goal) {
+                        return _buildGoalBadge(goal);
+                      }).toList(),
+                      // Add + button
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileScreen(openGoalDialog: true),
+                            ),
+                          );
+                          await _loadGoals();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade400, width: 1),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 14, color: Color(0xFF2D5016)),
+                              SizedBox(width: 4),
+                              Text(
+                                'Add',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2D5016),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+                      // Show "+X more" if collapsed and goals overflow
+                      if (!_expandedGoals && _goals.length > 3)
+                        GestureDetector(
+                          onTap: () {
+                            setState(() => _expandedGoals = true);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade400, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '+${_goals.length - 3}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF666666),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_expandedGoals && _goals.length > 3)
+                        GestureDetector(
+                          onTap: () {
+                            setState(() => _expandedGoals = false);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade400, width: 1),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Show less',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF666666),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  // Summary metric
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  );
-                }).toList(),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${_goals.length} goal${_goals.length != 1 ? 's' : ''} active',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF666666),
+                          ),
+                        ),
+                        _buildGoalsCompletionIndicator(),
+                      ],
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildGoalBadge(Goal goal) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade200,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade400, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                _showGoalDetailsDialog(goal);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    goal.name,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  if (goal.amount.isNotEmpty)
+                    Text(
+                      goal.amount,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF666666),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Edit button
+          GestureDetector(
+            onTap: () {
+              _showEditGoalDialog(goal);
+            },
+            child: const Icon(
+              Icons.edit,
+              size: 14,
+              color: Color(0xFF666666),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Delete button
+          GestureDetector(
+            onTap: () {
+              _showDeleteConfirmation(goal);
+            },
+            child: const Icon(
+              Icons.close,
+              size: 14,
+              color: Color(0xFFCC0000),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGoalDetailsDialog(Goal goal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(goal.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Type: ${goal.type}'),
+            if (goal.frequency.isNotEmpty) Text('Frequency: ${goal.frequency}'),
+            if (goal.amount.isNotEmpty) Text('Amount: ${goal.amount}'),
+            if (goal.description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text('Description: ${goal.description}'),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showEditGoalDialog(goal);
+            },
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditGoalDialog(Goal goal) {
+    late TextEditingController nameController;
+    late TextEditingController amountController;
+    late TextEditingController descriptionController;
+    
+    nameController = TextEditingController(text: goal.name);
+    amountController = TextEditingController(text: goal.amount);
+    descriptionController = TextEditingController(text: goal.description);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Goal'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Goal Name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                decoration: const InputDecoration(labelText: 'Amount/Frequency'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              nameController.dispose();
+              amountController.dispose();
+              descriptionController.dispose();
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              // Create updated goal with new values
+              final updatedGoal = Goal(
+                id: goal.id,
+                name: nameController.text.isNotEmpty ? nameController.text : goal.name,
+                type: goal.type,
+                frequency: goal.frequency,
+                frequencyValue: goal.frequencyValue,
+                amount: amountController.text.isNotEmpty ? amountController.text : goal.amount,
+                description: descriptionController.text,
+                completedDates: goal.completedDates,
+              );
+              await GoalManager.updateGoal(updatedGoal);
+              nameController.dispose();
+              amountController.dispose();
+              descriptionController.dispose();
+              await _loadGoals();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Goal updated successfully')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(Goal goal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Goal?'),
+        content: Text('Are you sure you want to delete "${goal.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await GoalManager.deleteGoal(goal.id);
+              await _loadGoals();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalsCompletionIndicator() {
+    if (_goals.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Simple indicator: show emoji based on completion level
+    // For now, just show a simple message
+    return const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.check_circle_outline,
+          size: 14,
+          color: Color(0xFF999999),
+        ),
+        SizedBox(width: 4),
+        Text(
+          'In progress',
+          style: TextStyle(
+            fontSize: 11,
+            color: Color(0xFF999999),
+          ),
+        ),
+      ],
     );
   }
 }
