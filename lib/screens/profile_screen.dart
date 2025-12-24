@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../utils/avatar_manager.dart';
 import '../utils/goal_manager.dart';
+import '../utils/auth_guard.dart';
+import '../services/supabase_preferences_manager.dart' as preferences;
 
 class ProfileScreen extends StatefulWidget {
   final bool openGoalDialog;
@@ -18,19 +20,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = '';
   bool _notificationsEnabled = true;
   bool _dataCollectionEnabled = true;
-  List<Goal> _goals = [];
   AvatarOption? _selectedAvatar;
   late TextEditingController _userNameController;
-  List<String> _symptoms = [
-    'Cramps',
-    'Headache',
-    'Fatigue',
-    'Bloating',
-    'Mood swings',
-    'Acne',
-    'Back pain',
-  ];
   List<String> _userSymptoms = [];
+  
+  // Collapsible sections state
+  bool _expandedCycleInfo = true;
+  bool _expandedPreferences = true;
+  bool _expandedCompleteSetup = false;
+  
+  // Cycle data
+  late DateTime _lastPeriodStart;
+  late int _cycleLength;
+  late int _periodLength;
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     if (widget.openGoalDialog) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showEditGoalsDialog();
+        _showCreateGoalDialog();
       });
     }
   }
@@ -51,18 +53,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  /// Load all user data including goals
+  /// Load all user data including cycle info
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final symptomsJson = prefs.getString('userSymptoms');
-    final goals = await GoalManager.getAllGoals();
+    
+    String? lastPeriodStr = prefs.getString('lastPeriodStart');
+    _lastPeriodStart = lastPeriodStr != null
+        ? DateTime.parse(lastPeriodStr)
+        : DateTime(2024, 11, 28);
+
+    _cycleLength = prefs.getInt('cycleLength') ?? 28;
+    _periodLength = prefs.getInt('periodLength') ?? 5;
     
     setState(() {
       _userName = prefs.getString('userName') ?? '';
       _userNameController.text = _userName;
       _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
       _dataCollectionEnabled = prefs.getBool('dataCollectionEnabled') ?? true;
-      _goals = goals;
       
       if (symptomsJson != null) {
         _userSymptoms = symptomsJson.split(',').where((s) => s.isNotEmpty).toList();
@@ -77,33 +85,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   /// Load all goals (used for sync across screens)
-  Future<void> _loadGoals() async {
+  Future<void> _saveUserData() async {
+    // Check auth before saving
+    if (!AuthGuard.isLoggedIn()) {
+      final authenticated = await AuthGuard.requireAuth(context);
+      if (!authenticated) return;
+    }
+
     try {
-      final goals = await GoalManager.getAllGoals();
-      setState(() {
-        _goals = goals;
-      });
+      final userId = AuthGuard.getCurrentUserId()!;
+      
+      // Format name: capitalize first letter, rest lowercase
+      final formattedName = _userName.isEmpty 
+          ? '' 
+          : _userName[0].toUpperCase() + _userName.substring(1).toLowerCase();
+
+      // Save to Supabase
+      await preferences.SupabasePreferencesManager.setAvatar(userId, _selectedAvatar?.id ?? 'default');
+      await preferences.SupabasePreferencesManager.setNotifications(userId, _notificationsEnabled);
+
+      // Also save to local storage
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userName', formattedName);
+      setState(() => _userName = formattedName);
+      _userNameController.text = formattedName;
+      await prefs.setBool('notificationsEnabled', _notificationsEnabled);
+      await prefs.setBool('dataCollectionEnabled', _dataCollectionEnabled);
+      await prefs.setString('userSymptoms', _userSymptoms.join(','));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Settings saved!'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Goals not loaded. Tap to refresh.')),
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Color(0xFFDD4444),
+          ),
         );
       }
     }
-  }
-
-  Future<void> _saveUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    // Format name: capitalize first letter, rest lowercase
-    final formattedName = _userName.isEmpty 
-        ? '' 
-        : _userName[0].toUpperCase() + _userName.substring(1).toLowerCase();
-    await prefs.setString('userName', formattedName);
-    setState(() => _userName = formattedName);
-    _userNameController.text = formattedName;
-    await prefs.setBool('notificationsEnabled', _notificationsEnabled);
-    await prefs.setBool('dataCollectionEnabled', _dataCollectionEnabled);
-    await prefs.setString('userSymptoms', _userSymptoms.join(','));
   }
 
   String _getInitials(String name) {
@@ -234,155 +261,203 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 30),
 
-              // Goals Card
-              // Goals Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            '🎯 Your Goals',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF333333),
-                            ),
-                          ),
-                          if (_goals.isNotEmpty)
-                            Text(
-                              '${_goals.length}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.pink.shade400,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (_goals.isEmpty)
-                        const Text(
-                          'No goals set yet. Tap + to add…',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF999999),
-                            fontStyle: FontStyle.italic,
-                          ),
-                        )
-                      else
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ..._buildGroupedGoals(),
-                            const SizedBox(height: 12),
-                            GestureDetector(
-                              onTap: _showCreateGoalDialog,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.green.shade400, width: 1),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.add, size: 14, color: Colors.green.shade700),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Add Goal',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
+              // MY DATA SECTION - Collapsible cards
+              Text(
+                'My Data',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
 
-              // Symptoms Card
+              // Cycle Info Card
               Card(
                 elevation: 0,
                 color: Colors.grey.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: ExpansionTile(
+                  initiallyExpanded: _expandedCycleInfo,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _expandedCycleInfo = expanded);
+                  },
+                  title: const Text(
+                    'Cycle Information',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoRow('Cycle Length:', '$_cycleLength days'),
+                          const SizedBox(height: 12),
+                          _buildInfoRow('Period Length:', '$_periodLength days'),
+                          const SizedBox(height: 12),
+                          _buildInfoRow(
+                            'Last Period Start:',
+                            _lastPeriodStart.toLocal().toString().split(' ')[0],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pushNamed(context, '/onboarding-cycle');
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                              ),
+                              child: const Text('Update Cycle Info'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Preferences Card
+              Card(
+                elevation: 0,
+                color: Colors.grey.shade50,
+                child: ExpansionTile(
+                  initiallyExpanded: _expandedPreferences,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _expandedPreferences = expanded);
+                  },
+                  title: const Text(
+                    'Lifestyle Preferences',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Symptoms to Track',
+                            'Track your lifestyle preferences:',
                             style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
                               color: Color(0xFF999999),
                             ),
                           ),
-                          GestureDetector(
-                            onTap: _showEditSymptomsDialog,
-                            child: Icon(Icons.edit, color: Colors.pink.shade400, size: 20),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildPreferenceItem('🍎 Nutrition'),
+                                const SizedBox(height: 8),
+                                _buildPreferenceItem('🏋️ Fitness'),
+                                const SizedBox(height: 8),
+                                _buildPreferenceItem('⏱️ Fasting'),
+                                const SizedBox(height: 8),
+                                _buildPreferenceItem('😊 Mood & Productivity'),
+                                const SizedBox(height: 8),
+                                _buildPreferenceItem('🌙 Wellness'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pushNamed(context, '/lifestyle-preferences');
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                              ),
+                              child: const Text('Manage Preferences'),
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _userSymptoms.map((symptom) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.pink.shade100,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.pink.shade300),
-                            ),
-                            child: Text(
-                              symptom,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF333333),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      if (_userSymptoms.isEmpty)
-                        const Text(
-                          'No symptoms selected. Add symptoms to track during your cycle.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF999999),
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
 
-              // Preferences Card
+              // Complete Setup Card (if applicable)
+              Card(
+                elevation: 0,
+                color: Colors.amber.shade50,
+                child: ExpansionTile(
+                  initiallyExpanded: _expandedCompleteSetup,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _expandedCompleteSetup = expanded);
+                  },
+                  title: const Text(
+                    '✓ Complete Your Setup',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Steps to complete your onboarding:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF999999),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildSetupStep('1', 'Update Your Cycle Information'),
+                          const SizedBox(height: 8),
+                          _buildSetupStep('2', 'Set Your Lifestyle Preferences'),
+                          const SizedBox(height: 8),
+                          _buildSetupStep('3', 'Select Symptoms to Track'),
+                          const SizedBox(height: 8),
+                          _buildSetupStep('4', 'Create Your First Goal'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // SETTINGS SECTION
+              Text(
+                'Settings',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Notifications & Preferences Card
               Card(
                 elevation: 0,
                 color: Colors.grey.shade50,
@@ -392,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Preferences',
+                        'Notifications & Privacy',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -425,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Privacy Card
+              // Legal & Privacy Card
               Card(
                 elevation: 0,
                 color: Colors.grey.shade50,
@@ -435,7 +510,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Privacy & Security',
+                        'Legal & Privacy',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -443,16 +518,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildInfoTile(
-                        'Data Storage',
-                        'All your data is stored locally on your device',
-                        Icons.storage,
+                      _buildLegalTile(
+                        'Privacy Policy',
+                        'How we protect your data',
+                        Icons.description,
                       ),
                       const SizedBox(height: 12),
-                      _buildInfoTile(
-                        'Privacy Policy',
-                        'Learn how we protect your information',
-                        Icons.description,
+                      _buildLegalTile(
+                        'Terms of Service',
+                        'Our terms and conditions',
+                        Icons.assignment,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildLegalTile(
+                        'GDPR Compliance',
+                        'Your data rights and controls',
+                        Icons.shield_outlined,
                       ),
                     ],
                   ),
@@ -486,6 +567,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF999999),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF333333),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreferenceItem(String label) {
+    return Row(
+      children: [
+        const Icon(Icons.check_circle, color: Colors.green, size: 16),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF333333),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSetupStep(String number, String title) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.amber.shade200,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            number,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF333333),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF333333),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegalTile(String title, String subtitle, IconData icon) {
+    return GestureDetector(
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Opening: $title'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.blue.shade400,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF999999),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400, size: 14),
+        ],
       ),
     );
   }
@@ -526,42 +730,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           value: value,
           onChanged: onChanged,
           activeColor: Colors.pink.shade400,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoTile(String title, String subtitle, IconData icon) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: Colors.pink.shade400,
-          size: 24,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF999999),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -623,530 +791,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     };
   }
 
-  void _showEditGoalDialog(Goal existingGoal) {
-    // Parse the goal data to reconstruct the form state
-    String selectedType = existingGoal.type;
-    String selectedFrequency = existingGoal.frequency;
-    int frequencyValue = existingGoal.frequencyValue;
-    Map<String, String> fieldValues = {};
-    Map<String, String> selectedToggles = {};
-
-    // Parse description and amount to reconstruct field values
-    final parts = <String>[];
-    if (existingGoal.amount.isNotEmpty) {
-      parts.add(existingGoal.amount);
-    }
-    if (existingGoal.description.isNotEmpty) {
-      parts.addAll(existingGoal.description.split(', '));
-    }
-
-    // Get the field config for the goal type
-    final fieldConfig = _getGoalFieldConfig();
-    final goalConfig = fieldConfig[selectedType];
-    
-    if (goalConfig != null) {
-      final fields = goalConfig['fields'] as List<Map<String, dynamic>>;
-      
-      // Try to match parts to fields
-      int partIndex = 0;
-      for (var field in fields) {
-        if (partIndex >= parts.length) break;
-        
-        final key = field['key'] as String;
-        final type = field['type'] as String;
-        
-        if (type == 'text') {
-          fieldValues[key] = parts[partIndex];
-          partIndex++;
-        } else if (type == 'toggleList' || type == 'toggleListWithCustom') {
-          final options = (field['options'] as List<String>?) ?? [];
-          final part = parts[partIndex];
-          if (options.contains(part)) {
-            selectedToggles[key] = part;
-            fieldValues[key] = part;
-          } else {
-            fieldValues[key] = part;
-          }
-          partIndex++;
-        }
-      }
-    }
-
-    final typeOptions = ['exercise', 'water', 'sleep', 'meditation', 'nutrition', 'weightloss', 'wellness'];
-    final frequencyOptions = ['daily', 'weekly', 'monthly'];
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final currentConfig = fieldConfig[selectedType]!;
-          final fields = currentConfig['fields'] as List<Map<String, dynamic>>;
-          final requiresFrequency = currentConfig['requiresFrequency'] as bool? ?? false;
-          
-          return AlertDialog(
-            title: const Text('Edit Goal'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Goal Type
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Goal Type',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButton<String>(
-                          value: selectedType,
-                          isExpanded: true,
-                          items: typeOptions.map((type) {
-                            return DropdownMenuItem(
-                              value: type,
-                              child: Text('${type[0].toUpperCase()}${type.substring(1)}'),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedType = value ?? selectedType;
-                              fieldValues.clear();
-                              selectedToggles.clear();
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Frequency - only show if required for this goal type
-                  if (requiresFrequency) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Frequency',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButton<String>(
-                            value: selectedFrequency,
-                            isExpanded: true,
-                            items: frequencyOptions.map((freq) {
-                              return DropdownMenuItem(
-                                value: freq,
-                                child: Text('${freq[0].toUpperCase()}${freq.substring(1)}'),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() => selectedFrequency = value ?? selectedFrequency);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Frequency Value - only show if frequency is required
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'How many times per $selectedFrequency?',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            keyboardType: TextInputType.number,
-                            controller: TextEditingController(text: frequencyValue.toString()),
-                            decoration: InputDecoration(
-                              hintText: 'e.g., 3',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            onChanged: (value) {
-                              setState(() => frequencyValue = int.tryParse(value) ?? 1);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  // Dynamic Fields
-                  ...fields.map((field) {
-                    final key = field['key'] as String;
-                    final label = field['label'] as String;
-                    final type = field['type'] as String;
-                    final initialValue = fieldValues[key] ?? '';
-                    
-                    if (type == 'text') {
-                      final hint = field['hint'] as String? ?? '';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: TextEditingController(text: initialValue),
-                              decoration: InputDecoration(
-                                hintText: hint,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onChanged: (value) {
-                                setState(() => fieldValues[key] = value);
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    } else if (type == 'toggleList') {
-                      final options = (field['options'] as List<String>?) ?? [];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: options.map((option) {
-                                final isSelected = selectedToggles[key] == option;
-                                return FilterChip(
-                                  label: Text(option),
-                                  selected: isSelected,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        selectedToggles[key] = option;
-                                        fieldValues[key] = option;
-                                      } else {
-                                        selectedToggles.remove(key);
-                                        fieldValues.remove(key);
-                                      }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      );
-                    } else if (type == 'toggleListWithCustom') {
-                      final options = (field['options'] as List<String>?) ?? [];
-                      final isCustom = !options.contains(initialValue);
-                      final customValue = isCustom ? initialValue : '';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              label,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF666666)),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ...options.map((option) {
-                                  final isSelected = selectedToggles[key] == option;
-                                  return FilterChip(
-                                    label: Text(option),
-                                    selected: isSelected,
-                                    onSelected: (selected) {
-                                      setState(() {
-                                        if (selected) {
-                                          selectedToggles[key] = option;
-                                          fieldValues[key] = option;
-                                        } else {
-                                          selectedToggles.remove(key);
-                                          fieldValues.remove(key);
-                                        }
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: TextEditingController(text: customValue),
-                              decoration: InputDecoration(
-                                labelText: 'Or enter custom diet type',
-                                hintText: 'e.g., Paleo, Mediterranean',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onChanged: (value) {
-                                setState(() {
-                                  if (value.isNotEmpty) {
-                                    selectedToggles[key] = value;
-                                    fieldValues[key] = value;
-                                  }
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                    return SizedBox.shrink();
-                  }).toList(),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  // Build the amount and description from field values
-                  String amount = '';
-                  String description = '';
-                  bool amountSet = false;
-                  
-                  for (var field in fields) {
-                    final key = field['key'] as String;
-                    final value = fieldValues[key] ?? '';
-                    
-                    if (value.isEmpty) continue;
-                    
-                    // First non-empty value becomes amount
-                    if (!amountSet) {
-                      amount = value;
-                      amountSet = true;
-                    } else {
-                      // Everything else goes to description
-                      description += (description.isEmpty ? '' : ', ') + value;
-                    }
-                  }
-                  
-                  if (amount.isNotEmpty) {
-                    final updatedGoal = Goal(
-                      id: existingGoal.id,
-                      name: existingGoal.name,
-                      type: selectedType,
-                      frequency: selectedFrequency,
-                      frequencyValue: frequencyValue,
-                      amount: amount,
-                      description: description,
-                      completedDates: existingGoal.completedDates,
-                    );
-                    
-                    await GoalManager.updateGoal(updatedGoal);
-                    await _loadGoals(); // Sync across all screens
-                    
-                    // If opened from dashboard, pop to return to dashboard
-                    if (widget.openGoalDialog) {
-                      if (mounted) {
-                        Navigator.pop(context); // Close dialog
-                        Navigator.pop(context); // Return to dashboard
-                      }
-                    } else {
-                      if (mounted) {
-                        Navigator.pop(context); // Just close dialog
-                      }
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.pink.shade400,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Save Changes'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  /// Group goals by type for display
-  Map<String, List<Goal>> _getGoalsByType() {
-    final groupedGoals = <String, List<Goal>>{};
-    for (final goal in _goals) {
-      if (!groupedGoals.containsKey(goal.type)) {
-        groupedGoals[goal.type] = [];
-      }
-      groupedGoals[goal.type]!.add(goal);
-    }
-    return groupedGoals;
-  }
-
-  /// Build grouped goal widgets
-  List<Widget> _buildGroupedGoals() {
-    final groupedGoals = _getGoalsByType();
-    final List<Widget> widgets = [];
-
-    for (final type in groupedGoals.keys) {
-      final goals = groupedGoals[type]!;
-
-      // Type header
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: Text(
-            _getGoalTypeLabel(type),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-      );
-
-      // Goals in this type
-      for (final goal in goals) {
-        widgets.add(_buildGoalItem(goal));
-      }
-
-      widgets.add(const SizedBox(height: 12));
-    }
-
-    return widgets;
-  }
-
-  /// Build individual goal item with shortcuts
-  Widget _buildGoalItem(Goal goal) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10.0),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.pink.shade200),
-        ),
-        child: Row(
-          children: [
-            // Goal details (tappable for details view)
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  _showGoalDetailsDialog(goal);
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      goal.name,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF333333),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      goal.getDisplayString(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF666666),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Edit button
-            GestureDetector(
-              onTap: () => _showEditGoalDialog(goal),
-              child: Icon(
-                Icons.edit,
-                color: Colors.blue.shade400,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Delete button
-            GestureDetector(
-              onTap: () => _showDeleteGoalConfirm(goal.id),
-              child: Icon(
-                Icons.close,
-                color: Colors.red.shade400,
-                size: 18,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Get display label for goal type
-  String _getGoalTypeLabel(String type) {
-    final labels = {
-      'exercise': '💪 Exercise',
-      'water': '💧 Water',
-      'sleep': '😴 Sleep',
-      'meditation': '🧘 Meditation',
-      'nutrition': '🥗 Nutrition',
-      'weightloss': '⚖️ Weight Loss',
-      'wellness': '✨ Wellness',
-    };
-    return labels[type] ?? type;
-  }
-
   /// Show goal details dialog
-  void _showGoalDetailsDialog(Goal goal) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(goal.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Type: ${_getGoalTypeLabel(goal.type)}'),
-            if (goal.frequency.isNotEmpty) Text('Frequency: ${goal.frequency}'),
-            if (goal.frequencyValue > 0) Text('Times per period: ${goal.frequencyValue}'),
-            if (goal.amount.isNotEmpty) Text('Amount: ${goal.amount}'),
-            if (goal.description.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text('Description: ${goal.description}'),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showEditGoalDialog(goal);
-            },
-            child: const Text('Edit'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditGoalsDialog() {
-    _showCreateGoalDialog();
-  }
-
   void _showCreateGoalDialog() {
     int currentStep = 0;
     String selectedType = 'exercise';
@@ -1425,46 +1070,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (currentStep == totalSteps - 1)
                 ElevatedButton(
                   onPressed: () async {
-                    // Build the amount and description from field values
-                    String amount = '';
-                    String description = '';
-                    bool amountSet = false;
-                    
-                    for (var field in fields) {
-                      final key = field['key'] as String;
-                      final value = fieldValues[key] ?? '';
+                    // Auth already checked when dialog opened
+                    try {
+                      // Build the amount and description from field values
+                      String amount = '';
+                      String description = '';
+                      bool amountSet = false;
                       
-                      if (value.isEmpty) continue;
-                      
-                      if (!amountSet) {
-                        amount = value;
-                        amountSet = true;
-                      } else {
-                        description += (description.isEmpty ? '' : ', ') + value;
-                      }
-                    }
-                    
-                    if (amount.isNotEmpty) {
-                      final newGoal = Goal(
-                        id: GoalManager.generateId(),
-                        name: '${selectedType[0].toUpperCase()}${selectedType.substring(1)}',
-                        type: selectedType,
-                        frequency: selectedFrequency,
-                        frequencyValue: frequencyValue,
-                        amount: amount,
-                        description: description,
-                      );
-                      
-                      await GoalManager.addGoal(newGoal);
-                      await _loadGoals(); // Sync across all screens
-                      
-                      if (mounted) {
-                        if (widget.openGoalDialog) {
-                          Navigator.pop(context);
-                          Navigator.pop(context);
+                      for (var field in fields) {
+                        final key = field['key'] as String;
+                        final value = fieldValues[key] ?? '';
+                        
+                        if (value.isEmpty) continue;
+                        
+                        if (!amountSet) {
+                          amount = value;
+                          amountSet = true;
                         } else {
-                          Navigator.pop(context);
+                          description += (description.isEmpty ? '' : ', ') + value;
                         }
+                      }
+                      
+                      if (amount.isNotEmpty) {
+                        final newGoal = Goal(
+                          id: GoalManager.generateId(),
+                          name: '${selectedType[0].toUpperCase()}${selectedType.substring(1)}',
+                          type: selectedType,
+                          frequency: selectedFrequency,
+                          frequencyValue: frequencyValue,
+                          amount: amount,
+                          description: description,
+                        );
+                        
+                        await GoalManager.addGoal(newGoal);
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Goal added!'),
+                              backgroundColor: Color(0xFF4CAF50),
+                            ),
+                          );
+
+                          if (widget.openGoalDialog) {
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          } else {
+                            Navigator.pop(context);
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Color(0xFFDD4444),
+                          ),
+                        );
                       }
                     }
                   },
@@ -1477,182 +1140,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Future<void> _showDeleteGoalConfirm(String goalId) async {
-    final goal = _goals.firstWhere((g) => g.id == goalId);
-    
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete Goal?',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'You\'re about to delete:',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF999999),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.pink.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.pink.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    goal.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF333333),
-                    ),
-                  ),
-                  if (goal.amount.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        goal.amount,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF666666),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'This action cannot be undone. All progress for this goal will be deleted.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF999999),
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF666666),
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await GoalManager.deleteGoal(goalId);
-              await _loadGoals(); // Sync across all screens
-              
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${goal.name} deleted'),
-                    duration: const Duration(seconds: 2),
-                    backgroundColor: Colors.pink.shade400,
-                  ),
-                );
-                Navigator.pop(context);
-                
-                // If opened from dashboard, also pop the profile screen to return to dashboard
-                if (widget.openGoalDialog) {
-                  Navigator.pop(context);
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pink.shade400,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Delete Goal',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
-    );
-  }
-
-  void _showEditSymptomsDialog() {
-    final selectedSymptoms = Set<String>.from(_userSymptoms);
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Select Symptoms to Track'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: _symptoms.map((symptom) {
-                return CheckboxListTile(
-                  title: Text(symptom),
-                  value: selectedSymptoms.contains(symptom),
-                  onChanged: (value) {
-                    setState(() {
-                      if (value == true) {
-                        selectedSymptoms.add(symptom);
-                      } else {
-                        selectedSymptoms.remove(symptom);
-                      }
-                    });
-                  },
-                );
-              }).toList(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                this.setState(() {
-                  _userSymptoms = selectedSymptoms.toList();
-                });
-                _saveUserData();
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.pink.shade400,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
       ),
     );
   }

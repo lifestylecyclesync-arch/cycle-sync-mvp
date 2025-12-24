@@ -7,6 +7,7 @@ import '../models/phase.dart';
 import '../utils/goal_manager.dart';
 import '../utils/avatar_manager.dart';
 import 'profile_screen.dart';
+import 'calendar_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,12 +24,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Goal> _goals = [];
   int _avatarRefreshKey = 0; // Trigger FutureBuilder refresh
   bool _expandedGoals = false; // Track if goals are expanded
+  bool _skipRecoveryDismissed = false; // Track skip recovery banner dismissal
+  int _appLaunchCount = 0; // Track app launches for banner resurfacing
 
   @override
   void initState() {
     super.initState();
     _loadCycleData();
     _loadGoals();
+    _loadBannerState();
   }
 
   @override
@@ -39,6 +43,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _avatarRefreshKey++;
     });
     _loadGoals(); // Reload goals when coming back from profile
+  }
+
+  Future<void> _loadBannerState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastDismissalDate = prefs.getString('skipRecoveryDismissedDate');
+    final dismissalCount = prefs.getInt('skipRecoveryDismissalCount') ?? 0;
+    
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month}-${today.day}';
+    
+    // Reset dismissal on new cycle or after 3-5 launches
+    if (lastDismissalDate == null || lastDismissalDate != todayKey || dismissalCount >= 3) {
+      setState(() {
+        _skipRecoveryDismissed = false;
+        _appLaunchCount = 0;
+      });
+    } else {
+      setState(() {
+        _skipRecoveryDismissed = true;
+        _appLaunchCount = dismissalCount;
+      });
+    }
+  }
+
+  Future<void> _dismissSkipRecoveryBanner() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month}-${today.day}';
+    
+    await prefs.setString('skipRecoveryDismissedDate', todayKey);
+    await prefs.setInt('skipRecoveryDismissalCount', _appLaunchCount + 1);
+    
+    setState(() {
+      _skipRecoveryDismissed = true;
+      _appLaunchCount++;
+    });
   }
 
   Future<void> _loadCycleData() async {
@@ -226,7 +266,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 60.0),
                 child: Column(
                   children: [
-                    // Goals Section
+                    // Skip Recovery Banner (dismissible)
+                    if (!_skipRecoveryDismissed && _getCurrentPhase() == 'Menstrual')
+                      _buildSkipRecoveryBanner(),
+
+                    // Phase Banner
+                    _buildPhaseBanner(),
+                    const SizedBox(height: 24),
+
+                    // Daily Recommendations
+                    _buildDailyRecommendationsCard(),
+                    const SizedBox(height: 24),
+
+                    // Goals Section (moved from Profile, now prominent)
                     _buildGoalsCard(),
                     const SizedBox(height: 24),
 
@@ -239,6 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 24),
 
                     // Cycle Phase Graph
+
                     _buildCyclePhaseGraph(),
                   ],
                 ),
@@ -246,6 +299,283 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // New Widget: Skip Recovery Banner
+  Widget _buildSkipRecoveryBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.red.shade100,
+            Colors.red.shade50,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          const Text('🛌', style: TextStyle(fontSize: 32)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Prioritize Recovery',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'You\'re in your menstrual phase. Get extra rest and hydration.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _dismissSkipRecoveryBanner,
+            child: Icon(
+              Icons.close,
+              color: Colors.red.shade600,
+              size: 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // New Widget: Phase Banner
+  Widget _buildPhaseBanner() {
+    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+    int currentDay = _getCurrentCycleDay();
+
+    if (phase == null) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () {
+        // Navigate to Daily Detail screen for today
+        _showTodayDetail();
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.2),
+              _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.08),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                phase.emoji,
+                style: const TextStyle(fontSize: 32),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getCurrentPhase(),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Day $currentDay • ${phase.description}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward,
+              color: _getPhaseColor(_getCurrentPhase()),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // New Widget: Daily Recommendations
+  Widget _buildDailyRecommendationsCard() {
+    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+
+    if (phase == null) return const SizedBox.shrink();
+
+    final recommendations = [
+      {
+        'emoji': '🍎',
+        'title': 'Nutrition',
+        'value': phase.dietName,
+        'color': Colors.green,
+      },
+      {
+        'emoji': '🏋️',
+        'title': 'Fitness',
+        'value': phase.workoutName,
+        'color': Colors.blue,
+      },
+      {
+        'emoji': '😊',
+        'title': 'Mood',
+        'value': phase.description,
+        'color': Colors.purple,
+      },
+    ];
+
+    return GestureDetector(
+      onTap: _showTodayDetail,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade200.withValues(alpha: 0.5),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Daily Recommendations',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward,
+                  color: Colors.grey.shade400,
+                  size: 18,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: recommendations
+                  .asMap()
+                  .entries
+                  .map((entry) {
+                    int index = entry.key;
+                    Map<String, dynamic> rec = entry.value;
+
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: index < recommendations.length - 1 ? 12 : 0,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (rec['color'] as Color).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (rec['color'] as Color).withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              rec['emoji'] as String,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    rec['title'] as String,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: (rec['color'] as Color),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    rec['value'] as String,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF333333),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  })
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper: Navigate to Daily Detail Screen for today
+  void _showTodayDetail() {
+    // Navigate to Calendar screen to view today's detailed insights
+    // The calendar screen will handle opening the daily detail modal
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CalendarScreen(),
       ),
     );
   }

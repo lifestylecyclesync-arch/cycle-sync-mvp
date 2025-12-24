@@ -2,9 +2,19 @@ import 'package:flutter/material.dart';
 import 'screens/onboarding_welcome_screen.dart';
 import 'screens/onboarding_cycle_input_screen.dart';
 import 'screens/onboarding_lifestyle_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_navigation.dart';
+import 'utils/auth_guard.dart';
+import 'services/supabase_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Supabase (only once here)
+  await SupabaseService.initialize();
+  
+  // Initialize auth state
+  await AuthGuard.initialize();
+  
   runApp(const CycleSyncApp());
 }
 
@@ -49,7 +59,7 @@ class CycleSyncApp extends StatelessWidget {
       routes: {
         '/cycleBasics': (context) => const OnboardingCycleInputScreen(),
         '/lifestylePreferences': (context) => const OnboardingLifestyleScreen(),
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) => const MainNavigation(),
       },
     );
   }

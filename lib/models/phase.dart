@@ -20,6 +20,19 @@ class Phase {
     required this.endPercentage,
   });
 
+  /// Get the day range for this phase (e.g., "Days 1–5").
+  int get startDay => (startPercentage * 28).ceil();
+  int get endDay => (endPercentage * 28).floor();
+
+  /// Get next phase in the cycle.
+  String? get nextPhase {
+    final phaseIndex = CyclePhases.phases.indexOf(this);
+    if (phaseIndex >= 0 && phaseIndex < CyclePhases.phases.length - 1) {
+      return CyclePhases.phases[phaseIndex + 1].name;
+    }
+    return 'Menstrual'; // Loop back to menstrual phase
+  }
+
   /// Get day range for a specific cycle length.
   /// For example, for a 28-day cycle: Days 1–5
   String getDayRange(int cycleLength) {

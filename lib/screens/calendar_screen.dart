@@ -405,6 +405,76 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Colors.grey;
   }
 
+  // Get goal type colors for overlay borders
+  Color _getGoalTypeColorForOverlay(String goalType) {
+    switch (goalType) {
+      case 'Exercise':
+      case 'Fitness':
+        return Colors.green; // Green for fitness/exercise
+      case 'Hydration':
+        return Colors.blue; // Blue for hydration
+      case 'Fasting':
+        return Colors.purple; // Purple for fasting
+      case 'Mood':
+      case 'Wellness':
+        return Colors.teal; // Teal for mood/wellness
+      default:
+        return Colors.grey.shade400;
+    }
+  }
+
+  // Build goal overlay borders for a day cell
+  List<Widget> _buildGoalOverlayBorders(DateTime day) {
+    final dateKey = DateTime(day.year, day.month, day.day);
+    final overlayBorders = <Widget>[];
+    
+    // Collect all goals for this day
+    final goalsForDay = <String, bool>{}; // goalType -> isCompleted
+    
+    for (final goal in _goals) {
+      final isCompleted = _goalCompletions[goal.id]?[dateKey] ?? false;
+      if (!goalsForDay.containsKey(goal.type) || isCompleted) {
+        goalsForDay[goal.type] = isCompleted;
+      }
+    }
+    
+    // If no goals, return empty
+    if (goalsForDay.isEmpty) return overlayBorders;
+    
+    // Build borders for each goal type
+    int borderIndex = 0;
+    
+    goalsForDay.forEach((goalType, isCompleted) {
+      final color = _getGoalTypeColorForOverlay(goalType);
+      
+      overlayBorders.add(
+        Positioned(
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: color,
+                width: 1.5,
+                // Dashed effect - use strokeAlign to create visual spacing
+                strokeAlign: BorderSide.strokeAlignOutside,
+              ),
+            ),
+            // Slight rotation offset to make multiple borders visible
+            transform: Matrix4.identity()
+              ..translate(borderIndex * 0.8, borderIndex * 0.8),
+          ),
+        ),
+      );
+      borderIndex++;
+    });
+    
+    return overlayBorders;
+  }
+
   Color _getFilteredDayColor(DateTime day) {
     final dateKey = DateTime(day.year, day.month, day.day);
     
@@ -1324,6 +1394,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
+                                // Goal overlays (borders) - shown in phase view
+                                if (_selectedFilter == 'phases')
+                                  ..._buildGoalOverlayBorders(day),
+                                
                                 if (isToday)
                                   Container(
                                     width: 44,
@@ -1508,6 +1582,11 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
   List<String> _loggedSymptoms = [];
   String _notes = '';
   late Map<String, dynamic> _currentProgressMetrics;
+  
+  // Collapsible panels state
+  bool _expandedPhaseSummary = false;
+  bool _expandedHighlights = false;
+  bool _expandedQuickLog = false;
 
   @override
   void initState() {
@@ -2302,6 +2381,21 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                       ),
                     ],
 
+                    // Collapsible Panels Section
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Day Details',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPhaseSummaryPanel(),
+                    _buildUpcomingHighlightsPanel(),
+                    _buildQuickLogPanel(),
+
                     // Symptoms & Notes Section
                     const SizedBox(height: 24),
                     GestureDetector(
@@ -2648,6 +2742,261 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Collapsible Panel: Phase Summary
+  Widget _buildPhaseSummaryPanel() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: getPhaseColor(widget.phase).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: getPhaseColor(widget.phase).withValues(alpha: 0.3)),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: _expandedPhaseSummary,
+        onExpansionChanged: (expanded) {
+          setState(() => _expandedPhaseSummary = expanded);
+        },
+        title: const Text(
+          'Phase Summary',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_phaseData != null) ...[
+                  Text(
+                    'Characteristics',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _phaseData!.description,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF333333),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Divider(color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Nutrition',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _phaseData!.dietName,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Workout',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _phaseData!.workoutName,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fasting',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _phaseData!.fastingType,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Collapsible Panel: Upcoming Highlights
+  Widget _buildUpcomingHighlightsPanel() {
+    // Show upcoming days in the phase
+    int dayOfCycle = (widget.date.difference(widget.lastPeriodStart).inDays %
+            widget.cycleLength) +
+        1;
+    int daysUntilPhaseChange = _phaseData?.endDay ?? 7 - dayOfCycle + 1;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: _expandedHighlights,
+        onExpansionChanged: (expanded) {
+          setState(() => _expandedHighlights = expanded);
+        },
+        title: const Text(
+          'Upcoming Highlights',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade100),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Days until phase change',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$daysUntilPhaseChange days',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF333333),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Next Phase',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_phaseData?.nextPhase != null)
+                  Text(
+                    _phaseData!.nextPhase!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Collapsible Panel: Quick Log
+  Widget _buildQuickLogPanel() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: _expandedQuickLog,
+        onExpansionChanged: (expanded) {
+          setState(() => _expandedQuickLog = expanded);
+        },
+        title: const Text(
+          'Quick Log',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _showSymptomsAndNotes,
+                    icon: const Icon(Icons.add_circle_outline, size: 18),
+                    label: const Text('Log Symptoms & Notes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
