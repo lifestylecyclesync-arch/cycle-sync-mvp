@@ -3,9 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../utils/avatar_manager.dart';
-import '../utils/goal_manager.dart';
+import '../utils/goal_manager.dart' as util_goal;
 import '../utils/auth_guard.dart';
 import '../services/supabase_preferences_manager.dart' as preferences;
+import '../services/supabase_goal_manager.dart' as supabase_goal;
 
 class ProfileScreen extends StatefulWidget {
   final bool openGoalDialog;
@@ -169,6 +170,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: const Color(0xFF333333),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () async {
+              // Show confirmation dialog
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context); // Close dialog
+                        
+                        try {
+                          await AuthGuard.logout();
+                          if (mounted) {
+                            // Go back to previous screen (home/dashboard)
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ Logged out successfully'),
+                                backgroundColor: Color(0xFF4CAF50),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ Logout failed: $e'),
+                                backgroundColor: Color(0xFFDD4444),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Logout', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -729,7 +781,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: Colors.pink.shade400,
+          activeThumbColor: Colors.pink.shade400,
         ),
       ],
     );
@@ -1070,8 +1122,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (currentStep == totalSteps - 1)
                 ElevatedButton(
                   onPressed: () async {
-                    // Auth already checked when dialog opened
+                    // Check auth before saving
+                    if (!AuthGuard.isLoggedIn()) {
+                      final authenticated = await AuthGuard.requireAuth(context);
+                      if (!authenticated) return;
+                    }
+
                     try {
+                      final userId = AuthGuard.getCurrentUserId()!;
+                      
                       // Build the amount and description from field values
                       String amount = '';
                       String description = '';
@@ -1092,8 +1151,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       }
                       
                       if (amount.isNotEmpty) {
-                        final newGoal = Goal(
-                          id: GoalManager.generateId(),
+                        // Create goal object for local storage
+                        final localGoal = util_goal.Goal(
+                          id: util_goal.GoalManager.generateId(),
                           name: '${selectedType[0].toUpperCase()}${selectedType.substring(1)}',
                           type: selectedType,
                           frequency: selectedFrequency,
@@ -1102,12 +1162,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           description: description,
                         );
                         
-                        await GoalManager.addGoal(newGoal);
+                        // Save to local storage
+                        await util_goal.GoalManager.addGoal(localGoal);
+                        
+                        // Create and save to Supabase
+                        final supabaseGoal = supabase_goal.Goal(
+                          id: localGoal.id,
+                          userId: userId,
+                          goalType: _mapGoalTypeToEnum(selectedType),
+                          targetValue: amount,
+                          frequency: selectedFrequency,
+                          description: description.isEmpty ? null : description,
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
+                        
+                        await supabase_goal.SupabaseGoalManager.addGoal(supabaseGoal);
 
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Goal added!'),
+                              content: Text('✅ Goal saved!'),
                               backgroundColor: Color(0xFF4CAF50),
                             ),
                           );
@@ -1124,7 +1199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Error: $e'),
+                            content: Text('❌ Error: $e'),
                             backgroundColor: Color(0xFFDD4444),
                           ),
                         );
@@ -1350,5 +1425,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  /// Map goal type string to SupabaseGoalManager.GoalType enum
+  supabase_goal.GoalType _mapGoalTypeToEnum(String type) {
+    switch (type.toLowerCase()) {
+      case 'exercise':
+      case 'fitness':
+        return supabase_goal.GoalType.fitness;
+      case 'water':
+      case 'hydration':
+        return supabase_goal.GoalType.hydration;
+      case 'sleep':
+        return supabase_goal.GoalType.sleep;
+      case 'meditation':
+        return supabase_goal.GoalType.meditation;
+      case 'nutrition':
+        return supabase_goal.GoalType.nutrition;
+      case 'wellness':
+      case 'weightloss':
+      default:
+        return supabase_goal.GoalType.wellness;
+    }
   }
 }

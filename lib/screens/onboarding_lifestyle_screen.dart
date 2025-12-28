@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
+import '../utils/auth_guard.dart';
+import '../services/supabase_preferences_manager.dart' as preferences;
 
 class OnboardingLifestyleScreen extends StatefulWidget {
   const OnboardingLifestyleScreen({super.key});
@@ -272,15 +274,48 @@ class _OnboardingLifestyleScreenState extends State<OnboardingLifestyleScreen> {
                     child: ElevatedButton(
                       onPressed: (_agreedToPrivacy && selectedCount > 0)
                           ? () async {
-                              // Save lifestyle preferences to SharedPreferences
-                              final prefs = await SharedPreferences.getInstance();
-                              await prefs.setBool('lifestyle_nutrition', _nutrition);
-                              await prefs.setBool('lifestyle_fitness', _fitness);
-                              await prefs.setBool('lifestyle_fasting', _fasting);
-                              await prefs.setBool('lifestyle_mood', _mood);
-                              await prefs.setBool('lifestyle_wellness', _wellness);
-                              if (mounted) {
-                                Navigator.of(context).pushReplacementNamed('/home');
+                              // Check auth
+                              if (!AuthGuard.isLoggedIn()) {
+                                final authenticated = await AuthGuard.requireAuth(context);
+                                if (!authenticated) return;
+                              }
+
+                              try {
+                                final userId = AuthGuard.getCurrentUserId()!;
+
+                                // Save to local storage
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setBool('lifestyle_nutrition', _nutrition);
+                                await prefs.setBool('lifestyle_fitness', _fitness);
+                                await prefs.setBool('lifestyle_fasting', _fasting);
+                                await prefs.setBool('lifestyle_mood', _mood);
+                                await prefs.setBool('lifestyle_wellness', _wellness);
+
+                                // Save to Supabase
+                                await preferences.SupabasePreferencesManager.updateUserPreferences(
+                                  userId: userId,
+                                  theme: 'light',
+                                  notificationsEnabled: true,
+                                );
+
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('✅ Preferences saved!'),
+                                      backgroundColor: Color(0xFF4CAF50),
+                                    ),
+                                  );
+                                  Navigator.of(context).pushReplacementNamed('/home');
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('❌ Error: $e'),
+                                      backgroundColor: Color(0xFFDD4444),
+                                    ),
+                                  );
+                                }
                               }
                             }
                           : null,

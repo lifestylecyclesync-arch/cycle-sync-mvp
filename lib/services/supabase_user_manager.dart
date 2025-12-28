@@ -24,12 +24,20 @@ class UserManager {
     required String password,
   }) async {
     try {
+      print('🔐 registerUser() START - email: $email');
       final result = await SupabaseService.registerUser(email, password);
-      print('Registration successful: ${result.user?.email}');
-      return result.user != null;
+      print('🔐 registerUser() - Response: user=${result.user?.email}, hasSession=${result.session != null}');
+      
+      // Check if user was created
+      if (result.user != null) {
+        print('🔐 registerUser() - SUCCESS: Account created');
+        return true;
+      } else {
+        print('🔐 registerUser() - FAILED: No user in response');
+        return false;
+      }
     } catch (e) {
-      print('Registration error - Type: ${e.runtimeType}');
-      print('Registration error - Message: $e');
+      print('🔐 registerUser() CATCH - Type: ${e.runtimeType}, Message: $e');
       return false;
     }
   }
@@ -59,7 +67,9 @@ class UserManager {
 
   // Check if user is logged in
   static Future<bool> isLoggedIn() async {
-    return SupabaseService.getCurrentUser() != null;
+    final currentUser = SupabaseService.getCurrentUser();
+    print('🔐 UserManager.isLoggedIn() - currentUser = $currentUser');
+    return currentUser != null;
   }
 
   // Get user ID

@@ -244,6 +244,31 @@ class SupabasePreferencesManager {
     }
   }
 
+  /// Update multiple preferences at once
+  static Future<void> updateUserPreferences({
+    required String userId,
+    String? theme,
+    bool? notificationsEnabled,
+    String? avatarId,
+    String? photoUrl,
+  }) async {
+    try {
+      final updates = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      
+      if (theme != null) updates['theme'] = theme;
+      if (notificationsEnabled != null) updates['notifications_enabled'] = notificationsEnabled;
+      if (avatarId != null) updates['avatar_id'] = avatarId;
+      if (photoUrl != null) updates['photo_url'] = photoUrl;
+      
+      await SupabaseService.updateData(_table, userId, updates);
+    } catch (e) {
+      print('Error updating preferences: $e');
+      rethrow;
+    }
+  }
+
   // Get preferences stream for real-time updates
   // TODO: Implement real-time stream when Supabase library is updated
   // static Stream<UserPreferences?> getPreferencesStream(String userId) {

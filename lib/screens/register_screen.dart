@@ -80,22 +80,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
+      print('🔐 RegisterScreen._handleRegister() - Starting registration with email: ${_emailController.text.trim()}');
       final success = await UserManager.registerUser(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
+      print('🔐 RegisterScreen._handleRegister() - Result: success=$success');
       if (success) {
         if (mounted) {
+          print('🔐 RegisterScreen._handleRegister() - Calling onRegisterSuccess callback');
           widget.onRegisterSuccess();
         }
       } else {
+        print('🔐 RegisterScreen._handleRegister() - Registration returned false');
         setState(() {
           _errorMessage = 'Registration failed. Email may already be in use.';
         });
       }
     } catch (e) {
       print('Register catch block - Error: $e');
+      print('Register catch block - Error type: ${e.runtimeType}');
       setState(() {
         _errorMessage = 'Registration failed: ${e.toString()}';
       });

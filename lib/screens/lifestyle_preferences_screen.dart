@@ -212,7 +212,7 @@ class _LifestylePreferencesScreenState extends State<LifestylePreferencesScreen>
                                 onChanged: (value) {
                                   _togglePreference(pref.key, value);
                                 },
-                                activeColor: pref.color,
+                                activeThumbColor: pref.color,
                               ),
                             ],
                           ),

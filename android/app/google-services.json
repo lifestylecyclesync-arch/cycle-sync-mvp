@@ -1,0 +1,47 @@
+﻿{
+  "project_info": {
+    "project_number": "242785352298",
+    "project_id": "cycle-sync-482313",
+    "storage_bucket": "cycle-sync-482313.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:242785352298:android:e0baf7d9fce140738674a37618426f7",
+        "android_client_info": {
+          "package_name": "com.example.cycle_sync_mvp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "242785352298-o5298d69a7sjgfsga5fbh6hncd33u2di.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cycle_sync_mvp",
+            "certificate_hash": "87b6972d864a427688bfbb13f3447984"
+          }
+        },
+        {
+          "client_id": "242785352298-4hro3clk4c9neqae61qk9frovhsoo1bv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ1234567"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "242785352298-4hro3clk4c9neqae61qk9frovhsoo1bv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/favorites_manager.dart';
+import '../utils/auth_guard.dart';
 
 class FastingSuggestionsScreen extends StatefulWidget {
   final String fastingType;
@@ -347,15 +348,37 @@ class _FastingSuggestionsScreenState extends State<FastingSuggestionsScreen> {
                                 Row(
                                   children: [
                                     GestureDetector(
-                                      onTap: () {
-                                        FavoritesManager.toggleFavoriteFasting(fasting);
-                                        setState(() {
-                                          if (_favoriteFasting.contains(fasting)) {
-                                            _favoriteFasting.remove(fasting);
-                                          } else {
-                                            _favoriteFasting.add(fasting);
-                                          }
-                                        });
+                                      onTap: () async {
+                                        // Check auth before saving favorite
+                                        if (!AuthGuard.isLoggedIn()) {
+                                          final authenticated = await AuthGuard.requireAuth(context);
+                                          if (!authenticated) return;
+                                        }
+
+                                        try {
+                                          // Save to local storage
+                                          await FavoritesManager.toggleFavoriteFasting(fasting);
+                                          setState(() {
+                                            if (_favoriteFasting.contains(fasting)) {
+                                              _favoriteFasting.remove(fasting);
+                                            } else {
+                                              _favoriteFasting.add(fasting);
+                                            }
+                                          });
+                                          
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(_favoriteFasting.contains(fasting) ? '✅ Added to favorites!' : '❌ Removed from favorites'),
+                                              duration: const Duration(seconds: 1),
+                                            ),
+                                          );
+                                        } catch (e) {
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error: $e')),
+                                          );
+                                        }
                                       },
                                       child: Icon(
                                         _favoriteFasting.contains(fasting) ? Icons.favorite : Icons.favorite_border,

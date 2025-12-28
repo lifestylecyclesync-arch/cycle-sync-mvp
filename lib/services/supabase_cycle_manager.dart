@@ -174,6 +174,11 @@ class SupabaseCycleManager {
     }
   }
 
+  // Alias for getAllCycles for backward compatibility
+  static Future<List<Cycle>> getUserCycles(String userId) async {
+    return getAllCycles(userId);
+  }
+
   // Create new cycle
   static Future<Cycle?> createCycle({
     required String userId,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/favorites_manager.dart';
+import '../utils/auth_guard.dart';
 
 class NutritionSuggestionsScreen extends StatefulWidget {
   final String mealType; // breakfast, lunch, dinner, snack
@@ -351,15 +352,37 @@ class _NutritionSuggestionsScreenState extends State<NutritionSuggestionsScreen>
               Row(
                 children: [
                   GestureDetector(
-                    onTap: () {
-                      FavoritesManager.toggleFavoriteMeal(meal, widget.mealType);
-                      setState(() {
-                        if (_favoriteMeals.contains(meal)) {
-                          _favoriteMeals.remove(meal);
-                        } else {
-                          _favoriteMeals.add(meal);
-                        }
-                      });
+                    onTap: () async {
+                      // Check auth before saving favorite
+                      if (!AuthGuard.isLoggedIn()) {
+                        final authenticated = await AuthGuard.requireAuth(context);
+                        if (!authenticated) return;
+                      }
+
+                      try {
+                        // Save to local storage
+                        await FavoritesManager.toggleFavoriteMeal(meal, widget.mealType);
+                        setState(() {
+                          if (_favoriteMeals.contains(meal)) {
+                            _favoriteMeals.remove(meal);
+                          } else {
+                            _favoriteMeals.add(meal);
+                          }
+                        });
+                        
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(_favoriteMeals.contains(meal) ? '✅ Added to favorites!' : '❌ Removed from favorites'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      }
                     },
                     child: Icon(
                       _favoriteMeals.contains(meal) ? Icons.favorite : Icons.favorite_border,

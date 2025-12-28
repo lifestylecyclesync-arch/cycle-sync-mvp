@@ -3,9 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/cycle_utils.dart';
-import '../models/phase.dart';
-import '../utils/goal_manager.dart';
+import '../models/phase.dart' as phase_model;
+import '../utils/goal_manager.dart' as util_goal;
+import '../utils/goal_manager.dart' show Goal;
 import '../utils/avatar_manager.dart';
+import '../utils/auth_guard.dart';
+import '../services/supabase_cycle_manager.dart' as supabase_cycle;
+import '../services/supabase_goal_manager.dart' as supabase_goal;
 import 'profile_screen.dart';
 import 'calendar_screen.dart';
 
@@ -82,6 +86,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadCycleData() async {
+    try {
+      // If user is logged in, try to load from Supabase
+      if (AuthGuard.isLoggedIn()) {
+        final userId = AuthGuard.getCurrentUserId();
+        if (userId != null) {
+          final cycles = await supabase_cycle.SupabaseCycleManager.getUserCycles(userId);
+          if (cycles.isNotEmpty) {
+            // Use the most recent cycle
+            final latestCycle = cycles.last;
+            setState(() {
+              _lastPeriodStart = latestCycle.startDate;
+              _cycleLength = latestCycle.cycleLength;
+              _isLoading = false;
+            });
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading cycle from Supabase: $e');
+      // Fall through to load from local storage
+    }
+
+    // Fall back to local storage
     final prefs = await SharedPreferences.getInstance();
 
     String? lastPeriodStr = prefs.getString('lastPeriodStart');
@@ -97,9 +125,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadGoals() async {
-    final goals = await GoalManager.getAllGoals();
+    try {
+      // If user is logged in, try to load from Supabase
+      if (AuthGuard.isLoggedIn()) {
+        final userId = AuthGuard.getCurrentUserId();
+        if (userId != null) {
+          final supabaseGoals = await supabase_goal.SupabaseGoalManager.getAllGoals(userId);
+          if (supabaseGoals.isNotEmpty) {
+            // Convert SupabaseGoalManager.Goal to Goal (local model)
+            final localGoals = supabaseGoals.map((sg) {
+              return util_goal.Goal(
+                id: sg.id,
+                name: _getGoalNameFromType(sg.goalType),
+                type: _mapGoalTypeToString(sg.goalType),
+                frequency: sg.frequency,
+                frequencyValue: 1, // Default, not stored in Supabase schema
+                amount: sg.targetValue,
+                description: sg.description ?? '',
+              );
+            }).toList();
+
+            setState(() {
+              _goals = localGoals;
+            });
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading goals from Supabase: $e');
+      // Fall through to load from local storage
+    }
+
+    // Fall back to local storage
+    final localGoals = await util_goal.GoalManager.getAllGoals();
     setState(() {
-      _goals = goals;
+      _goals = localGoals;
     });
   }
 
@@ -362,7 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // New Widget: Phase Banner
   Widget _buildPhaseBanner() {
-    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+    phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
     int currentDay = _getCurrentCycleDay();
 
     if (phase == null) return const SizedBox.shrink();
@@ -438,7 +499,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // New Widget: Daily Recommendations
   Widget _buildDailyRecommendationsCard() {
-    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+    phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
 
     if (phase == null) return const SizedBox.shrink();
 
@@ -583,7 +644,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPhaseProgressCard() {
     int currentDay = _getCurrentCycleDay();
     double progress = currentDay / _cycleLength;
-    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+    phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
 
     return Container(
       padding: const EdgeInsets.all(24.0),
@@ -670,7 +731,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildPhaseDetailsCard() {
-    Phase? phase = CyclePhases.findPhaseByName(_getCurrentPhase());
+    phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
 
     if (phase == null) return const SizedBox.shrink();
 
@@ -1190,7 +1251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               Navigator.pop(context);
               // Create updated goal with new values
-              final updatedGoal = Goal(
+              final updatedGoal = util_goal.Goal(
                 id: goal.id,
                 name: nameController.text.isNotEmpty ? nameController.text : goal.name,
                 type: goal.type,
@@ -1200,7 +1261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 description: descriptionController.text,
                 completedDates: goal.completedDates,
               );
-              await GoalManager.updateGoal(updatedGoal);
+              await util_goal.GoalManager.updateGoal(updatedGoal);
               nameController.dispose();
               amountController.dispose();
               descriptionController.dispose();
@@ -1231,7 +1292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           TextButton(
             onPressed: () async {
-              await GoalManager.deleteGoal(goal.id);
+              await util_goal.GoalManager.deleteGoal(goal.id);
               await _loadGoals();
               if (context.mounted) Navigator.pop(context);
             },
@@ -1268,9 +1329,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
   }
+
+  /// Get goal display name from GoalType
+  String _getGoalNameFromType(supabase_goal.GoalType type) {
+    final typeStr = _mapGoalTypeToString(type);
+    return '${typeStr[0].toUpperCase()}${typeStr.substring(1)}';
+  }
+
+  /// Convert SupabaseGoalManager.GoalType enum to string
+  String _mapGoalTypeToString(supabase_goal.GoalType type) {
+    switch (type) {
+      case supabase_goal.GoalType.fitness:
+        return 'exercise';
+      case supabase_goal.GoalType.hydration:
+        return 'water';
+      case supabase_goal.GoalType.sleep:
+        return 'sleep';
+      case supabase_goal.GoalType.meditation:
+        return 'meditation';
+      case supabase_goal.GoalType.nutrition:
+        return 'nutrition';
+      case supabase_goal.GoalType.wellness:
+      default:
+        return 'wellness';
+    }
+  }
 }
 
-// Custom painter for hormonal evolution curve
 class HormonalCurvePainter extends CustomPainter {
   final int cycleLength;
   final int currentDay;

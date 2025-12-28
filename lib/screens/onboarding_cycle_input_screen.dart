@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
+import '../utils/auth_guard.dart';
+import '../services/supabase_cycle_manager.dart';
 
 class OnboardingCycleInputScreen extends StatefulWidget {
   const OnboardingCycleInputScreen({super.key});
@@ -208,13 +210,48 @@ class _OnboardingCycleInputScreenState extends State<OnboardingCycleInputScreen>
                       onPressed: () async {
                         if (_formKey.currentState!.validate() && _lastPeriodStart != null) {
                           _formKey.currentState!.save();
-                          // Save cycle data to SharedPreferences
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setString('lastPeriodStart', _lastPeriodStart!.toIso8601String());
-                          await prefs.setInt('cycleLength', _cycleLength);
-                          await prefs.setInt('periodLength', _periodLength);
-                          if (mounted) {
-                            Navigator.of(context).pushNamed('/lifestylePreferences');
+                          
+                          // Check auth
+                          if (!AuthGuard.isLoggedIn()) {
+                            final authenticated = await AuthGuard.requireAuth(context);
+                            if (!authenticated) return;
+                          }
+
+                          try {
+                            final userId = AuthGuard.getCurrentUserId()!;
+
+                            // Save to local storage
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setString('lastPeriodStart', _lastPeriodStart!.toIso8601String());
+                            await prefs.setInt('cycleLength', _cycleLength);
+                            await prefs.setInt('periodLength', _periodLength);
+
+                            // Save to Supabase
+                            await SupabaseCycleManager.createCycle(
+                              userId: userId,
+                              cycleLength: _cycleLength,
+                              periodLength: _periodLength,
+                              startDate: _lastPeriodStart!,
+                            );
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('✅ Cycle info saved!'),
+                                  backgroundColor: Color(0xFF4CAF50),
+                                ),
+                              );
+                              Navigator.of(context).pushNamed('/lifestylePreferences');
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('❌ Error: $e'),
+                                  backgroundColor: Color(0xFFDD4444),
+                                ),
+                              );
+                            }
                           }
                         } else if (_lastPeriodStart == null) {
                           ScaffoldMessenger.of(context).showSnackBar(

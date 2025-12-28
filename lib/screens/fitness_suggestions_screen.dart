@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/gradient_wrapper.dart';
 import '../utils/favorites_manager.dart';
+import '../utils/auth_guard.dart';
 
 class FitnessSuggestionsScreen extends StatefulWidget {
   final String workoutType;
@@ -391,15 +392,37 @@ class _FitnessSuggestionsScreenState extends State<FitnessSuggestionsScreen> {
                               Row(
                                 children: [
                                   GestureDetector(
-                                    onTap: () {
-                                      FavoritesManager.toggleFavoriteWorkout(workout);
-                                      setState(() {
-                                        if (_favoriteWorkouts.contains(workout)) {
-                                          _favoriteWorkouts.remove(workout);
-                                        } else {
-                                          _favoriteWorkouts.add(workout);
-                                        }
-                                      });
+                                    onTap: () async {
+                                      // Check auth before saving favorite
+                                      if (!AuthGuard.isLoggedIn()) {
+                                        final authenticated = await AuthGuard.requireAuth(context);
+                                        if (!authenticated) return;
+                                      }
+
+                                      try {
+                                        // Save to local storage
+                                        await FavoritesManager.toggleFavoriteWorkout(workout);
+                                        setState(() {
+                                          if (_favoriteWorkouts.contains(workout)) {
+                                            _favoriteWorkouts.remove(workout);
+                                          } else {
+                                            _favoriteWorkouts.add(workout);
+                                          }
+                                        });
+                                        
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(_favoriteWorkouts.contains(workout) ? '✅ Added to favorites!' : '❌ Removed from favorites'),
+                                            duration: const Duration(seconds: 1),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Error: $e')),
+                                        );
+                                      }
                                     },
                                     child: Icon(
                                       _favoriteWorkouts.contains(workout) ? Icons.favorite : Icons.favorite_border,

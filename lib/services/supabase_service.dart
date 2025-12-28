@@ -18,7 +18,34 @@ class SupabaseService {
 
   /// Register a new user
   static Future<AuthResponse> registerUser(String email, String password) async {
-    return await _client.auth.signUp(email: email, password: password);
+    final response = await _client.auth.signUp(email: email, password: password);
+    print('🔐 SupabaseService.registerUser() - signUp response: user=${response.user?.email}, session=${response.session}');
+    
+    // If signup succeeded and we have a session, return it
+    if (response.user != null && response.session != null) {
+      print('🔐 SupabaseService.registerUser() - Session already created automatically');
+      return response;
+    }
+    
+    // If no session but user was created, try signing in immediately
+    // This handles the case where email confirmation is disabled
+    if (response.user != null) {
+      print('🔐 SupabaseService.registerUser() - User created, attempting immediate login...');
+      try {
+        final loginResponse = await _client.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
+        print('🔐 SupabaseService.registerUser() - Immediate login successful');
+        return loginResponse;
+      } catch (e) {
+        print('🔐 SupabaseService.registerUser() - Immediate login failed: $e');
+        // Return the original signup response, user might need to confirm email
+        return response;
+      }
+    }
+    
+    return response;
   }
 
   /// Login user
