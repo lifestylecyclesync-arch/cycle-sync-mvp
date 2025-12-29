@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cycle_sync_mvp/models/phase.dart';
 
 void main() {
   group('Cycle Manager Tests', () {

@@ -105,6 +105,37 @@ class UserManager {
     }
   }
 
+  // Send password reset email with reset link
+  static Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      print('🔐 Sending password reset email to: $email');
+      // Send reset email - Supabase will handle the password reset on their web interface
+      // User clicks the link in the email and resets their password there
+      await SupabaseService.client.auth.resetPasswordForEmail(email);
+      print('🔐 Password reset email sent successfully');
+    } catch (e) {
+      print('🔐 Password reset email failed: $e');
+      throw Exception('Failed to send password reset email: ${e.toString()}');
+    }
+  }
+
+  // Verify OTP and return session (kept for reference, not used in new flow)
+  static Future<bool> verifyOTP(String email, String token) async {
+    try {
+      print('🔐 Verifying OTP: $email, token: $token');
+      final response = await SupabaseService.client.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.email,
+      );
+      print('🔐 OTP verification successful');
+      return response.user != null;
+    } catch (e) {
+      print('🔐 OTP verification failed: $e');
+      throw Exception('Invalid verification code: ${e.toString()}');
+    }
+  }
+
   // Google Sign-In
   static Future<bool> signInWithGoogle() async {
     try {

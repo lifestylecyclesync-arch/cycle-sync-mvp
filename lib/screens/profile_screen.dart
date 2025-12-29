@@ -7,6 +7,7 @@ import '../utils/goal_manager.dart' as util_goal;
 import '../utils/auth_guard.dart';
 import '../services/supabase_preferences_manager.dart' as preferences;
 import '../services/supabase_goal_manager.dart' as supabase_goal;
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool openGoalDialog;
@@ -19,8 +20,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = '';
-  bool _notificationsEnabled = true;
-  bool _dataCollectionEnabled = true;
   AvatarOption? _selectedAvatar;
   late TextEditingController _userNameController;
   List<String> _userSymptoms = [];
@@ -70,8 +69,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _userName = prefs.getString('userName') ?? '';
       _userNameController.text = _userName;
-      _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? true;
-      _dataCollectionEnabled = prefs.getBool('dataCollectionEnabled') ?? true;
       
       if (symptomsJson != null) {
         _userSymptoms = symptomsJson.split(',').where((s) => s.isNotEmpty).toList();
@@ -85,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  /// Load all goals (used for sync across screens)
+  /// Save user data to local and Supabase
   Future<void> _saveUserData() async {
     // Check auth before saving
     if (!AuthGuard.isLoggedIn()) {
@@ -103,15 +100,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       // Save to Supabase
       await preferences.SupabasePreferencesManager.setAvatar(userId, _selectedAvatar?.id ?? 'default');
-      await preferences.SupabasePreferencesManager.setNotifications(userId, _notificationsEnabled);
 
       // Also save to local storage
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userName', formattedName);
       setState(() => _userName = formattedName);
       _userNameController.text = formattedName;
-      await prefs.setBool('notificationsEnabled', _notificationsEnabled);
-      await prefs.setBool('dataCollectionEnabled', _dataCollectionEnabled);
       await prefs.setString('userSymptoms', _userSymptoms.join(','));
 
       if (mounted) {
@@ -166,56 +160,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile & Settings'),
+        title: const Text('Profile'),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: const Color(0xFF333333),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () async {
-              // Show confirmation dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        Navigator.pop(context); // Close dialog
-                        
-                        try {
-                          await AuthGuard.logout();
-                          if (mounted) {
-                            // Go back to previous screen (home/dashboard)
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('✅ Logged out successfully'),
-                                backgroundColor: Color(0xFF4CAF50),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('❌ Logout failed: $e'),
-                                backgroundColor: Color(0xFFDD4444),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text('Logout', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
                 ),
               );
             },
@@ -497,125 +454,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 30),
-
-              // SETTINGS SECTION
-              Text(
-                'Settings',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Notifications & Preferences Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Notifications & Privacy',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF999999),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildToggleTile(
-                        'Notifications',
-                        'Receive cycle reminders and tips',
-                        _notificationsEnabled,
-                        (value) {
-                          setState(() => _notificationsEnabled = value);
-                          _saveUserData();
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _buildToggleTile(
-                        'Data Collection',
-                        'Help improve the app with anonymized insights',
-                        _dataCollectionEnabled,
-                        (value) {
-                          setState(() => _dataCollectionEnabled = value);
-                          _saveUserData();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Legal & Privacy Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Legal & Privacy',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF999999),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLegalTile(
-                        'Privacy Policy',
-                        'How we protect your data',
-                        Icons.description,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildLegalTile(
-                        'Terms of Service',
-                        'Our terms and conditions',
-                        Icons.assignment,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildLegalTile(
-                        'GDPR Compliance',
-                        'Your data rights and controls',
-                        Icons.shield_outlined,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // About Section
-              Center(
-                child: Column(
-                  children: [
-                    Text(
-                      'Cycle Sync MVP',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'v1.0.0',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -694,94 +532,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fontWeight: FontWeight.w500,
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLegalTile(String title, String subtitle, IconData icon) {
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Opening: $title'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      },
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color: Colors.blue.shade400,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF999999),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400, size: 14),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToggleTile(
-    String title,
-    String subtitle,
-    bool value,
-    Function(bool) onChanged,
-  ) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF999999),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: Colors.pink.shade400,
         ),
       ],
     );

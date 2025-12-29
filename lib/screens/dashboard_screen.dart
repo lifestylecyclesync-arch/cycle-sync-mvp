@@ -27,7 +27,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   List<Goal> _goals = [];
   int _avatarRefreshKey = 0; // Trigger FutureBuilder refresh
-  bool _expandedGoals = false; // Track if goals are expanded
   bool _skipRecoveryDismissed = false; // Track skip recovery banner dismissal
   int _appLaunchCount = 0; // Track app launches for banner resurfacing
 
@@ -218,104 +217,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             children: [
               // Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20.0),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.3),
-                      _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.15),
-                    ],
-                  ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Your Cycle Insights',
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    color: Color(0xFF333333),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Cycle day ${_getCurrentCycleDay()} of $_cycleLength',
-                                  style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF666666),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                              ],
+                          Text(
+                            'Cycle Day ${_getCurrentCycleDay()} of $_cycleLength',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
                             ),
                           ),
-                          GestureDetector(
-                            onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-                              );
-                              // Reload goals when returning from profile screen
-                              await _loadGoals();
-                            },
-                            child: FutureBuilder<List<Object>>(
-                              key: ValueKey(_avatarRefreshKey),
-                              future: Future.wait([
-                                SharedPreferences.getInstance(),
-                                AvatarManager.getSelectedAvatar().then((avatar) => avatar ?? AvatarManager.getDefaultAvatar()),
-                              ]),
-                              builder: (context, snapshot) {
-                                String userName = 'Guest';
-                                AvatarOption? avatar;
-                                
-                                if (snapshot.hasData) {
-                                  final prefs = snapshot.data![0] as SharedPreferences;
-                                  avatar = snapshot.data![1] as AvatarOption?;
-                                  final savedName = prefs.getString('userName') ?? '';
-                                  userName = savedName.isEmpty ? 'Guest' : savedName;
-                                }
-                                
-                                final initials = _getInitials(userName);
-                                final pastelColor = _getPastelColor(initials);
-                                
-                                if (avatar?.isPhoto == true && avatar?.photoPath != null) {
-                                  return CircleAvatar(
-                                    radius: 24,
-                                    backgroundImage: FileImage(File(avatar!.photoPath!)),
-                                  );
-                                }
-                                
-                                return CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: avatar?.color ?? pastelColor,
-                                  child: Text(
-                                    avatar?.emoji ?? initials,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF333333),
-                                    ),
-                                  ),
-                                );
-                              },
+                          const SizedBox(height: 4),
+                          Text(
+                            _getCurrentPhase(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                          );
+                          await _loadGoals();
+                        },
+                        child: FutureBuilder<List<Object>>(
+                          key: ValueKey(_avatarRefreshKey),
+                          future: Future.wait([
+                            SharedPreferences.getInstance(),
+                            AvatarManager.getSelectedAvatar().then((avatar) => avatar ?? AvatarManager.getDefaultAvatar()),
+                          ]),
+                          builder: (context, snapshot) {
+                            String userName = 'Guest';
+                            AvatarOption? avatar;
+                            
+                            if (snapshot.hasData) {
+                              final prefs = snapshot.data![0] as SharedPreferences;
+                              avatar = snapshot.data![1] as AvatarOption?;
+                              final savedName = prefs.getString('userName') ?? '';
+                              userName = savedName.isEmpty ? 'Guest' : savedName;
+                            }
+                            
+                            final initials = _getInitials(userName);
+                            final pastelColor = _getPastelColor(initials);
+                            
+                            if (avatar?.isPhoto == true && avatar?.photoPath != null) {
+                              return CircleAvatar(
+                                radius: 22,
+                                backgroundImage: FileImage(File(avatar!.photoPath!)),
+                              );
+                            }
+                            
+                            return CircleAvatar(
+                              radius: 22,
+                              backgroundColor: avatar?.color ?? pastelColor,
+                              child: Text(
+                                avatar?.emoji ?? initials,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -324,7 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               // Content
               Padding(
-                padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 60.0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 60),
                 child: Column(
                   children: [
                     // Skip Recovery Banner (dismissible)
@@ -333,26 +311,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // Phase Banner
                     _buildPhaseBanner(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
                     // Daily Recommendations
                     _buildDailyRecommendationsCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
-                    // Goals Section (moved from Profile, now prominent)
+                    // Goals Section
                     _buildGoalsCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
                     // Phase Progress Circle
                     _buildPhaseProgressCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
                     // Phase Details
                     _buildPhaseDetailsCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
                     // Cycle Phase Graph
-
                     _buildCyclePhaseGraph(),
                   ],
                 ),
@@ -364,26 +341,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // New Widget: Skip Recovery Banner
+  // Skip Recovery Banner
   Widget _buildSkipRecoveryBanner() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.red.shade100,
-            Colors.red.shade50,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
+        color: Colors.amber.shade50,
+        border: Border(left: BorderSide(color: Colors.amber.shade400, width: 3)),
       ),
       child: Row(
         children: [
-          const Text('🛌', style: TextStyle(fontSize: 32)),
+          const Text('🛌', style: TextStyle(fontSize: 24)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -392,17 +361,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Text(
                   'Prioritize Recovery',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF333333),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
-                  'You\'re in your menstrual phase. Get extra rest and hydration.',
+                  'Get extra rest and hydration.',
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.red.shade700,
+                    fontSize: 11,
+                    color: Colors.grey.shade700,
                   ),
                 ),
               ],
@@ -412,8 +381,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: _dismissSkipRecoveryBanner,
             child: Icon(
               Icons.close,
-              color: Colors.red.shade600,
-              size: 20,
+              color: Colors.grey.shade600,
+              size: 18,
             ),
           ),
         ],
@@ -421,48 +390,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // New Widget: Phase Banner
+  // Phase Banner
   Widget _buildPhaseBanner() {
     phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
-    int currentDay = _getCurrentCycleDay();
 
     if (phase == null) return const SizedBox.shrink();
 
     return GestureDetector(
-      onTap: () {
-        // Navigate to Daily Detail screen for today
-        _showTodayDetail();
-      },
+      onTap: _showTodayDetail,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.2),
-              _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.08),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.3),
-          ),
+          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                phase.emoji,
-                style: const TextStyle(fontSize: 32),
-              ),
+            Text(
+              phase.emoji,
+              style: const TextStyle(fontSize: 28),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,16 +417,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     _getCurrentPhase(),
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                       color: Color(0xFF333333),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    'Day $currentDay • ${phase.description}',
+                    phase.description,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.grey.shade600,
                     ),
                   ),
@@ -487,9 +434,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             Icon(
-              Icons.arrow_forward,
-              color: _getPhaseColor(_getCurrentPhase()),
-              size: 20,
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: Colors.grey.shade400,
             ),
           ],
         ),
@@ -497,71 +444,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // New Widget: Daily Recommendations
+  // Daily Recommendations
   Widget _buildDailyRecommendationsCard() {
     phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
 
     if (phase == null) return const SizedBox.shrink();
 
     final recommendations = [
-      {
-        'emoji': '🍎',
-        'title': 'Nutrition',
-        'value': phase.dietName,
-        'color': Colors.green,
-      },
-      {
-        'emoji': '🏋️',
-        'title': 'Fitness',
-        'value': phase.workoutName,
-        'color': Colors.blue,
-      },
-      {
-        'emoji': '😊',
-        'title': 'Mood',
-        'value': phase.description,
-        'color': Colors.purple,
-      },
+      {'emoji': '🍎', 'title': 'Nutrition', 'value': phase.dietName},
+      {'emoji': '🏋️', 'title': 'Fitness', 'value': phase.workoutName},
+      {'emoji': '⏱️', 'title': 'Fasting', 'value': phase.fastingType},
     ];
 
     return GestureDetector(
       onTap: _showTodayDetail,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade200.withValues(alpha: 0.5),
-              blurRadius: 8,
-              spreadRadius: 1,
-            ),
-          ],
+          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Daily Recommendations',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward,
-                  color: Colors.grey.shade400,
-                  size: 18,
-                ),
-              ],
+            Text(
+              'Today\'s Recommendations',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF333333),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Column(
               children: recommendations
                   .asMap()
@@ -572,52 +485,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     return Padding(
                       padding: EdgeInsets.only(
-                        bottom: index < recommendations.length - 1 ? 12 : 0,
+                        bottom: index < recommendations.length - 1 ? 8 : 0,
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: (rec['color'] as Color).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: (rec['color'] as Color).withValues(alpha: 0.2),
+                      child: Row(
+                        children: [
+                          Text(
+                            rec['emoji'] as String,
+                            style: const TextStyle(fontSize: 16),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              rec['emoji'] as String,
-                              style: const TextStyle(fontSize: 20),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    rec['title'] as String,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: (rec['color'] as Color),
-                                    ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  rec['title'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF999999),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    rec['value'] as String,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF333333),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  rec['value'] as String,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF333333),
                                   ),
-                                ],
-                              ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     );
                   })
@@ -647,79 +549,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
     phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
 
     return Container(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _getPhaseColor(_getCurrentPhase()),
-            _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.7),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Cycle Progress',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  if (phase != null)
                     Text(
-                      _getCurrentPhase(),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
+                      phase.getDayRange(_cycleLength),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    if (phase != null)
-                      Text(
-                        phase.getDayRange(_cycleLength),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF666666),
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
               Text(
                 phase?.emoji ?? '🌙',
-                style: const TextStyle(fontSize: 50),
+                style: const TextStyle(fontSize: 24),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 12,
-              backgroundColor: Colors.white.withValues(alpha: 0.3),
-              valueColor: const AlwaysStoppedAnimation(Colors.white),
+              minHeight: 8,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation(_getPhaseColor(_getCurrentPhase())),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Day $currentDay',
+                'Day $currentDay of $_cycleLength',
                 style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF333333),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF666666),
                 ),
               ),
               Text(
                 '${(_cycleLength - currentDay)} days left',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                   color: Color(0xFF666666),
                 ),
               ),
@@ -736,47 +630,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (phase == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Current Phase Details',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF333333),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildDetailRow('🍎', 'Diet Type', phase.dietName),
-          const SizedBox(height: 8),
-          _buildDetailRow('🏋️', 'Workout Type', phase.workoutName),
-          const SizedBox(height: 8),
-          _buildDetailRow('⏱️', 'Fasting Type', phase.fastingType),
-          const SizedBox(height: 12),
-          Text(
-            'Energy Level',
+            'Phase Details',
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF666666),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            phase.description,
-            style: const TextStyle(
-              fontSize: 13,
               color: Color(0xFF333333),
-              height: 1.5,
             ),
           ),
+          const SizedBox(height: 10),
+          _buildDetailRow('🍎', 'Nutrition', phase.dietName),
+          const SizedBox(height: 8),
+          _buildDetailRow('🏋️', 'Fitness', phase.workoutName),
+          const SizedBox(height: 8),
+          _buildDetailRow('⏱️', 'Fasting', phase.fastingType),
         ],
       ),
     );
@@ -785,8 +659,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildDetailRow(String emoji, String label, String value) {
     return Row(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 18)),
-        const SizedBox(width: 12),
+        Text(emoji, style: const TextStyle(fontSize: 16)),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -794,15 +668,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 10,
                   color: Color(0xFF999999),
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
                 value,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   color: Color(0xFF333333),
                   fontWeight: FontWeight.w600,
                 ),
@@ -820,27 +694,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     int currentDay = _getCurrentCycleDay();
     
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Hormonal Evolution',
+            'Hormonal Cycle',
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               color: Color(0xFF333333),
             ),
           ),
-          const SizedBox(height: 16),
-          // Hormonal curve graph
+          const SizedBox(height: 12),
           SizedBox(
-            height: 200,
+            height: 160,
             child: CustomPaint(
               painter: HormonalCurvePainter(
                 cycleLength: _cycleLength,
@@ -850,7 +721,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // Phase labels
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -869,8 +739,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: 6,
+          height: 6,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
@@ -880,7 +750,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Text(
           name,
           style: const TextStyle(
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: FontWeight.w600,
             color: Color(0xFF333333),
           ),
@@ -888,7 +758,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Text(
           days,
           style: const TextStyle(
-            fontSize: 9,
+            fontSize: 8,
             color: Color(0xFF999999),
           ),
         ),
@@ -897,436 +767,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildGoalsCard() {
-    return GestureDetector(
-      onTap: _goals.isEmpty
-          ? () async {
-              // Empty state: open add goal dialog
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(openGoalDialog: true),
-                ),
-              );
-              await _loadGoals();
-            }
-          : () async {
-              // Full module list view
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(openGoalDialog: false),
-                ),
-              );
-              await _loadGoals();
-            },
-      child: Container(
-        padding: const EdgeInsets.all(16.0),
-        decoration: BoxDecoration(
-          color: Colors.amber.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.amber.shade200),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '🎯 Your Goals',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                if (_goals.isNotEmpty)
-                  Text(
-                    '${_goals.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.amber.shade700,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_goals.isEmpty)
-              const Text(
-                'Tap to set your wellness goals',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF999999),
-                  fontStyle: FontStyle.italic,
-                ),
-              )
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Goal badges (limited to 3 or all if expanded)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ..._goals
-                          .take(_expandedGoals ? _goals.length : 3)
-                          .map((goal) {
-                        return _buildGoalBadge(goal);
-                      }).toList(),
-                      // Add + button
-                      GestureDetector(
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ProfileScreen(openGoalDialog: true),
-                            ),
-                          );
-                          await _loadGoals();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.green.shade400, width: 1),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add, size: 14, color: Color(0xFF2D5016)),
-                              SizedBox(width: 4),
-                              Text(
-                                'Add',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF2D5016),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Show "+X more" if collapsed and goals overflow
-                      if (!_expandedGoals && _goals.length > 3)
-                        GestureDetector(
-                          onTap: () {
-                            setState(() => _expandedGoals = true);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade400, width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '+${_goals.length - 3}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF666666),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else if (_expandedGoals && _goals.length > 3)
-                        GestureDetector(
-                          onTap: () {
-                            setState(() => _expandedGoals = false);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade400, width: 1),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Show less',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF666666),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  // Summary metric
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${_goals.length} goal${_goals.length != 1 ? 's' : ''} active',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF666666),
-                          ),
-                        ),
-                        _buildGoalsCompletionIndicator(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGoalBadge(Goal goal) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade200,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade400, width: 1),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                _showGoalDetailsDialog(goal);
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    goal.name,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF333333),
-                    ),
-                  ),
-                  if (goal.amount.isNotEmpty)
-                    Text(
-                      goal.amount,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF666666),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Edit button
-          GestureDetector(
-            onTap: () {
-              _showEditGoalDialog(goal);
-            },
-            child: const Icon(
-              Icons.edit,
-              size: 14,
-              color: Color(0xFF666666),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Delete button
-          GestureDetector(
-            onTap: () {
-              _showDeleteConfirmation(goal);
-            },
-            child: const Icon(
-              Icons.close,
-              size: 14,
-              color: Color(0xFFCC0000),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showGoalDetailsDialog(Goal goal) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(goal.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Type: ${goal.type}'),
-            if (goal.frequency.isNotEmpty) Text('Frequency: ${goal.frequency}'),
-            if (goal.amount.isNotEmpty) Text('Amount: ${goal.amount}'),
-            if (goal.description.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text('Description: ${goal.description}'),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showEditGoalDialog(goal);
-            },
-            child: const Text('Edit'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditGoalDialog(Goal goal) {
-    late TextEditingController nameController;
-    late TextEditingController amountController;
-    late TextEditingController descriptionController;
-    
-    nameController = TextEditingController(text: goal.name);
-    amountController = TextEditingController(text: goal.amount);
-    descriptionController = TextEditingController(text: goal.description);
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Goal'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Goal Name'),
+              Text(
+                'Goals ${_goals.isNotEmpty ? '(${_goals.length})' : ''}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF333333),
+                ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: amountController,
-                decoration: const InputDecoration(labelText: 'Amount/Frequency'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
+              GestureDetector(
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileScreen(openGoalDialog: true),
+                    ),
+                  );
+                  await _loadGoals();
+                },
+                child: const Icon(Icons.add, size: 20, color: Color(0xFF666666)),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              nameController.dispose();
-              amountController.dispose();
-              descriptionController.dispose();
-            },
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              // Create updated goal with new values
-              final updatedGoal = util_goal.Goal(
-                id: goal.id,
-                name: nameController.text.isNotEmpty ? nameController.text : goal.name,
-                type: goal.type,
-                frequency: goal.frequency,
-                frequencyValue: goal.frequencyValue,
-                amount: amountController.text.isNotEmpty ? amountController.text : goal.amount,
-                description: descriptionController.text,
-                completedDates: goal.completedDates,
+          if (_goals.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'No goals yet • Tap + to add',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 8),
+            ..._goals.take(3).map((goal) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            goal.name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                          if (goal.amount.isNotEmpty)
+                            Text(
+                              goal.amount,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.check_circle, size: 16, color: Colors.grey.shade400),
+                  ],
+                ),
               );
-              await util_goal.GoalManager.updateGoal(updatedGoal);
-              nameController.dispose();
-              amountController.dispose();
-              descriptionController.dispose();
-              await _loadGoals();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Goal updated successfully')),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
+            }).toList(),
+            if (_goals.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '+${_goals.length - 3} more',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.blue.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
-    );
-  }
-
-  void _showDeleteConfirmation(Goal goal) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Goal?'),
-        content: Text('Are you sure you want to delete "${goal.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await util_goal.GoalManager.deleteGoal(goal.id);
-              await _loadGoals();
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGoalsCompletionIndicator() {
-    if (_goals.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Simple indicator: show emoji based on completion level
-    // For now, just show a simple message
-    return const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.check_circle_outline,
-          size: 14,
-          color: Color(0xFF999999),
-        ),
-        SizedBox(width: 4),
-        Text(
-          'In progress',
-          style: TextStyle(
-            fontSize: 11,
-            color: Color(0xFF999999),
-          ),
-        ),
-      ],
     );
   }
 

@@ -22,10 +22,73 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   bool _agreedToTerms = false;
+  int _passwordStrength = 0; // 0-4: None, Weak, Fair, Good, Strong
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_updatePasswordStrength);
+  }
+
+  void _updatePasswordStrength() {
+    setState(() {
+      _passwordStrength = _calculatePasswordStrength(_passwordController.text);
+    });
+  }
+
+  int _calculatePasswordStrength(String password) {
+    if (password.isEmpty) return 0;
+    
+    int strength = 0;
+    
+    // Length check
+    if (password.length >= 6) strength++;
+    if (password.length >= 8) strength++;
+    
+    // Character variety
+    if (password.contains(RegExp(r'[a-z]'))) strength++;
+    if (password.contains(RegExp(r'[A-Z]'))) strength++;
+    if (password.contains(RegExp(r'[0-9]'))) strength++;
+    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) strength++;
+    
+    // Cap at 4
+    return (strength / 2).ceil().clamp(1, 4);
+  }
+
+  String _getStrengthLabel(int strength) {
+    switch (strength) {
+      case 1:
+        return 'Weak';
+      case 2:
+        return 'Fair';
+      case 3:
+        return 'Good';
+      case 4:
+        return 'Strong';
+      default:
+        return '';
+    }
+  }
+
+  Color _getStrengthColor(int strength) {
+    switch (strength) {
+      case 1:
+        return Colors.red;
+      case 2:
+        return Colors.orange;
+      case 3:
+        return Colors.amber;
+      case 4:
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.removeListener(_updatePasswordStrength);
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -209,7 +272,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   fillColor: Colors.grey.shade50,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              // Password Strength Indicator
+              if (_passwordController.text.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: _passwordStrength / 4,
+                            minHeight: 4,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: AlwaysStoppedAnimation(
+                              _getStrengthColor(_passwordStrength),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _getStrengthLabel(_passwordStrength),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _getStrengthColor(_passwordStrength),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  child: Text(
+                    'Min 6 characters, mix of letters & numbers recommended',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
 
               // Confirm Password Field
               TextField(
