@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/cycle_fab.dart';
 import 'dashboard_screen.dart';
 import 'calendar_screen.dart';
 import 'profile_screen.dart';
@@ -83,6 +85,110 @@ class _MainNavigationState extends State<MainNavigation> {
     });
   }
 
+  void _handleLogPeriod() {
+    DateTime selectedDate = DateTime.now();
+    int selectedCycleLength = 28;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('📍 Set Period Start'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'When did your last period start?',
+                style: TextStyle(fontSize: 14, color: Color(0xFF666666)),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 90)),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => selectedDate = picked);
+                  }
+                },
+                icon: const Icon(Icons.calendar_today),
+                label: Text(
+                  '${selectedDate.month}/${selectedDate.day}/${selectedDate.year}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pink.shade100,
+                  foregroundColor: const Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Cycle length selector
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Cycle Length:',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF999999), fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButton<int>(
+                  value: selectedCycleLength,
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  items: List.generate(
+                    17,
+                    (i) => DropdownMenuItem(
+                      value: 21 + i,
+                      child: Text('${21 + i} days'),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => selectedCycleLength = value);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('lastPeriodStart', selectedDate.toIso8601String());
+                await prefs.setInt('cycleLength', selectedCycleLength);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Period start updated! (${selectedCycleLength} day cycle)')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.pink.shade400,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,46 +206,11 @@ class _MainNavigationState extends State<MainNavigation> {
           ProfileScreen(),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        elevation: 0,
-        backgroundColor: Colors.blue,
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            builder: (BuildContext context) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.edit, color: Colors.blue),
-                      title: const Text('Log Symptoms & Notes'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleLogSymptoms();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.add, color: Colors.blue),
-                      title: const Text('Add Goal'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAddGoal();
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-        child: const Icon(Icons.add, size: 28),
+      floatingActionButton: CycleFAB(
+        onLogPeriod: _handleLogPeriod,
+        onLogSymptoms: _handleLogSymptoms,
+        onAddGoal: _handleAddGoal,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 10,

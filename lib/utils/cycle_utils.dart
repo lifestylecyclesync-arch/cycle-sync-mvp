@@ -96,17 +96,28 @@ String getCyclePhase(
   // ANCHOR 2: Calculate ovulation day using fixed luteal length
   int ovulationDay = getOvulationDay(cycleLength, lutealLength: lutealLength);
 
-  // Phase 1: MENSTRUAL (Day 1 → menstrualLength)
+  // Phase 1: MENSTRUAL split into two parts based on detailed table:
+  // Part A: Day 1 → (ML-1) - Menstrual (Days 1 to ML-1), IF 13h, Power phase
+  // Part B: Day ML - Menstrual (Day ML), IF 15h, Power phase
   if (dayOfCycle >= 1 && dayOfCycle <= menstrualLength) {
-    return 'Menstrual';
+    if (dayOfCycle < menstrualLength) {
+      return 'Menstrual (Days 1 to ML-1)';
+    } else {
+      return 'Menstrual (Day ML)';
+    }
   }
 
   // Phase 2: FOLLICULAR (Day (menstrualLength + 1) → (ovulationDay - 2))
-  // Split into two parts based on new table:
-  // Part A: Day (ML+1) → (ML+5) - Power phase follicular
-  // Part B: Day (ML+6) → (OD-2) - Manifestation phase follicular
+  // Split into two parts based on detailed table:
+  // Part A: Day (ML+1) → (ML+5) - Power phase follicular (Early Follicular)
+  // Part B: Day (ML+6) → (OD-2) - Manifestation phase follicular (Late Follicular)
   if (dayOfCycle > menstrualLength && dayOfCycle < (ovulationDay - 1)) {
-    return 'Follicular';
+    // Determine if early or late follicular
+    if (dayOfCycle <= (menstrualLength + 5)) {
+      return 'Follicular (Early)';
+    } else {
+      return 'Follicular (Late)';
+    }
   }
 
   // Phase 3: OVULATION (Day (ovulationDay - 1) → (ovulationDay + 1))
@@ -122,11 +133,11 @@ String getCyclePhase(
 
   // Phase 5: LATE LUTEAL (Day (ovulationDay + 6) → cycleLength)
   if (dayOfCycle >= (ovulationDay + 6)) {
-    return 'Luteal';
+    return 'Luteal (Late)';
   }
 
   // Fallback (should not reach here)
-  return 'Luteal';
+  return 'Luteal (Late)';
 }
 
 /// Checks if a day is within the fertile window (conception window).
@@ -162,35 +173,38 @@ bool isFertileWindow(
 /// Returns the emoji representation of a cycle phase.
 String getPhaseEmoji(String phase) {
   switch (phase) {
-    case 'Menstrual':
+    case 'Menstrual (Days 1 to ML-1)':
+    case 'Menstrual (Day ML)':
       return '🩸';
-    case 'Follicular':
+    case 'Follicular (Early)':
+    case 'Follicular (Late)':
       return '🌱';
     case 'Ovulation':
       return '✨';
     case 'Early Luteal':
       return '🌙';
-    case 'Luteal':
+    case 'Luteal (Late)':
       return '🌙';
     default:
       return '💫';
   }
 }
-
 /// Returns the faded color for a given cycle phase.
 /// Colors are intentionally muted so they can be enhanced when data is logged.
 
 Color getPhaseColor(String phase) {
   switch (phase) {
-    case 'Menstrual':
+    case 'Menstrual (Days 1 to ML-1)':
+    case 'Menstrual (Day ML)':
       return const Color(0xFFEDD8D8); // Faded Pink
-    case 'Follicular':
+    case 'Follicular (Early)':
+    case 'Follicular (Late)':
       return const Color(0xFFD8EFF8); // Faded Sky Blue
     case 'Ovulation':
       return const Color(0xFFEDD8D8); // Faded Pink
     case 'Early Luteal':
       return const Color(0xFFE8D8F8); // Faded Lavender
-    case 'Luteal':
+    case 'Luteal (Late)':
       return const Color(0xFFE8D8F8); // Faded Lavender
     default:
       return Colors.grey.shade100;
@@ -200,15 +214,19 @@ Color getPhaseColor(String phase) {
 /// Returns phase-specific energy/mood description.
 String getPhaseDescription(String phase) {
   switch (phase) {
+    case 'Menstrual (Days 1 to ML-1)':
+    case 'Menstrual (Day ML)':
     case 'Menstrual':
       return 'Rest & Restore';
-    case 'Follicular':
-      return 'High Energy Day';
+    case 'Follicular (Early)':
+      return 'Rising Energy';
+    case 'Follicular (Late)':
+      return 'Peak Confidence';
     case 'Ovulation':
       return 'Peak Energy';
     case 'Early Luteal':
       return 'Building Energy';
-    case 'Luteal':
+    case 'Luteal (Late)':
       return 'Inward Focus';
     default:
       return 'Cycle Tracking';
@@ -317,16 +335,22 @@ int getDaysUntilNextPhase(
 /// Returns the name of the next phase.
 String getNextPhase(String currentPhase) {
   switch (currentPhase) {
-    case 'Menstrual':
-      return 'Follicular';
-    case 'Follicular':
+    case 'Menstrual (Days 1 to ML-1)':
+      return 'Menstrual (Day ML)';
+    case 'Menstrual (Day ML)':
+      return 'Follicular (Early)';
+    case 'Follicular (Early)':
+      return 'Follicular (Late)';
+    case 'Follicular (Late)':
       return 'Ovulation';
     case 'Ovulation':
       return 'Early Luteal';
     case 'Early Luteal':
-      return 'Luteal';
-    case 'Luteal':
-      return 'Menstrual';
+      return 'Luteal (Late)';
+    case 'Luteal (Late)':
+      return 'Menstrual (Days 1 to ML-1)';
+    case 'Menstrual':
+      return 'Follicular (Early)';
     default:
       return 'Unknown';
   }
@@ -378,85 +402,85 @@ bool areCyclesRegular(List<int> previousCycleLengths) {
 /// All guidance (hormonal, workout, nutrition, fasting) is derived from the
 /// Phase model in lib/models/phase.dart which is the authoritative source.
 
-/// Get the hormonal basis for the current phase.
-/// 
-/// Pulls from the Phase model's hormonalBasis property.
-String getHormonalBasis(String phase) {
+/// Get the hormonal state for the current phase.
+String getHormonalState(String phase) {
   final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
-  return phaseData?.hormonalBasis ?? 'Unknown hormonal state';
+  return phaseData?.hormonalState ?? 'Unknown hormonal state';
 }
 
-/// Get the workout phase guidance (Dr. Mindy Pelz framework).
-/// 
-/// Returns: Power Phase, Manifestation Phase, or Nurture Phase
-String getWorkoutPhase(String phase) {
+/// Get the lifestyle phase (Power, Manifestation, or Nurture).
+String getLifestylePhase(String phase) {
   final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
-  return phaseData?.workoutPhase ?? 'Balanced Phase';
+  return phaseData?.lifestylePhase ?? 'Balanced';
 }
 
-/// Get the nutrition approach (Dr. Indy's framework).
-/// 
-/// Returns: Ketobiotic or Hormone Feasting
-String getNutritionGuidance(String phase) {
+/// Get the workout type recommendation for the phase.
+String getWorkoutType(String phase) {
   final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
-  return phaseData?.nutritionApproach ?? 'Balanced nutrition';
+  return phaseData?.workoutType ?? 'Moderate exercise';
 }
 
-/// Get the fasting type recommendation for the phase.
-/// 
-/// Returns: Power Fasting, Manifestation Fasting, or Nurture Fasting
-String getFastingPhase(String phase) {
+/// Get the diet type recommendation for the phase.
+String getDietType(String phase) {
   final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
-  return phaseData?.fastingType ?? 'Balanced Fasting';
+  return phaseData?.dietType ?? 'Balanced nutrition';
 }
 
-/// Get detailed phase-specific recommendations.
-/// 
-/// Returns a map with hormonal, workout, nutrition, and fasting guidance.
-/// This pulls ALL data from the Phase model (single source of truth).
+/// Get the fasting duration recommendation for the phase.
+String getFastingDuration(String phase) {
+  final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
+  return phaseData?.fastingDuration ?? 'IF 16h';
+}
+
+/// Get detailed phase-specific guidance notes.
+String getGuidanceNotes(String phase) {
+  final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
+  return phaseData?.guidanceNotes ?? 'No specific recommendations';
+}
+
+/// Get detailed phase-specific recommendations as a map.
 Map<String, String> getPhaseGuidance(String phase) {
   final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
   if (phaseData == null) {
     return {
       'phase': phase,
+      'lifestyle': 'Balanced',
       'hormonal': 'Unknown',
-      'workout': 'Balanced',
+      'workout': 'Moderate',
       'nutrition': 'Balanced',
-      'fasting': 'Balanced',
+      'fasting': 'IF 16h',
+      'notes': 'No information available',
     };
   }
   
   return {
     'phase': phaseData.name,
-    'hormonal': phaseData.hormonalBasis,
-    'workout': phaseData.workoutPhase,
-    'nutrition': phaseData.nutritionApproach,
-    'fasting': phaseData.fastingType,
+    'lifestyle': phaseData.lifestylePhase,
+    'hormonal': phaseData.hormonalState,
+    'workout': phaseData.workoutType,
+    'nutrition': phaseData.dietType,
+    'fasting': phaseData.fastingDuration,
+    'notes': phaseData.guidanceNotes,
   };
 }
 
-/// Get detailed fasting recommendations for a phase.
-String getFastingDetails(String phase) {
-  final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
-  return phaseData?.fastingDetails ?? 'No specific fasting recommendations';
-}
-
-/// Get emoji for workout phase.
-String getWorkoutPhaseEmoji(String phase) {
-  final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
+/// Get emoji for workout type.
+String getWorkoutPhaseEmoji(String workoutType) {
+  final phaseData = phase_model.CyclePhases.findPhaseByWorkoutType(workoutType);
   if (phaseData != null) {
     return phaseData.workoutEmoji;
   }
   
-  // Fallback for workout phase names
-  switch (phase) {
-    case 'Power Phase':
-    case 'Power Phase (continued)':
-    case 'Power Phase (again)':
+  // Fallback for common workout types
+  switch (workoutType) {
+    case 'Power':
+    case 'High-intensity':
       return '💪';
-    case 'Manifestation Phase':
+    case 'Manifestation':
+    case 'Moderate':
       return '✨';
-    case 'Nurture Phase':
+    case 'Nurture':
+    case 'Low-intensity':
       return '🌸';
     default:
       return '🏋️';
@@ -464,17 +488,19 @@ String getWorkoutPhaseEmoji(String phase) {
 }
 
 /// Get emoji for nutrition approach.
-String getNutritionPhaseEmoji(String phase) {
-  final phaseData = phase_model.CyclePhases.findPhaseByName(phase);
+String getNutritionPhaseEmoji(String nutritionType) {
+  final phaseData = phase_model.CyclePhases.findPhaseByDietType(nutritionType);
   if (phaseData != null) {
     return phaseData.nutritionEmoji;
   }
   
-  // Fallback for nutrition approach names
-  switch (phase) {
+  // Fallback for common nutrition types
+  switch (nutritionType) {
     case 'Ketobiotic':
+    case 'Low-carb':
       return '🥗';
     case 'Hormone Feasting':
+    case 'High-carb':
       return '🍲';
     default:
       return '🍽️';

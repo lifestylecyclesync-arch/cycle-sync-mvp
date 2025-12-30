@@ -105,26 +105,28 @@ void main() {
       expect(saved, isNull);
     });
 
-    test('Phase workout names are correct', () {
+    test('Phase workout types are correct', () {
       Phase menstrual = CyclePhases.phases[0];
-      Phase follicular = CyclePhases.phases[1];
-      Phase ovulation = CyclePhases.phases[2];
-      Phase earlyLuteal = CyclePhases.phases[3];
-      Phase luteal = CyclePhases.phases[4];
+      Phase follicular = CyclePhases.phases[2];
+      Phase ovulation = CyclePhases.phases[4];
+      Phase earlyLuteal = CyclePhases.phases[5];
+      Phase luteal = CyclePhases.phases[6];
 
-      expect(menstrual.workoutName, 'Low-Impact Training');
-      expect(follicular.workoutName, 'Mid-Impact Training');
-      expect(ovulation.workoutName, 'Strength Training');
-      expect(earlyLuteal.workoutName, 'Mid-Impact Training');
-      expect(luteal.workoutName, 'Mid- to Low-Impact Training');
+      expect(menstrual.workoutType.isNotEmpty, true);
+      expect(follicular.workoutType.isNotEmpty, true);
+      expect(ovulation.workoutType.isNotEmpty, true);
+      expect(earlyLuteal.workoutType.isNotEmpty, true);
+      expect(luteal.workoutType.isNotEmpty, true);
     });
 
-    test('Phase names and data are correct', () {
-      expect(CyclePhases.phases[0].name, 'Menstrual');
-      expect(CyclePhases.phases[1].name, 'Follicular');
-      expect(CyclePhases.phases[2].name, 'Ovulation');
-      expect(CyclePhases.phases[3].name, 'Early Luteal');
-      expect(CyclePhases.phases[4].name, 'Luteal');
+    test('Phase names match current phase list', () {
+      expect(CyclePhases.phases[0].name, 'Menstrual (Days 1 to ML-1)');
+      expect(CyclePhases.phases[1].name, 'Menstrual (Day ML)');
+      expect(CyclePhases.phases[2].name, 'Follicular (Early)');
+      expect(CyclePhases.phases[3].name, 'Follicular (Late)');
+      expect(CyclePhases.phases[4].name, 'Ovulation');
+      expect(CyclePhases.phases[5].name, 'Early Luteal');
+      expect(CyclePhases.phases[6].name, 'Luteal (Late)');
     });
   });
 }

@@ -59,7 +59,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
     
     setState(() {
       _nutritionSuggestion = prefs.getString('nutrition_suggestion') ??
-          _currentPhaseData?.dietName ??
+          _currentPhaseData?.dietType ??
           'Balanced diet';
       // Load today's fitness workouts (date-specific, multiple selections)
       final fitnessData = prefs.getString('fitness_$todayKey');
@@ -68,7 +68,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
         _fitnessSuggestion = _selectedWorkouts.join(', ');
       } else {
         _selectedWorkouts = [];
-        _fitnessSuggestion = _currentPhaseData?.workoutName ?? 'Moderate exercise';
+        _fitnessSuggestion = _currentPhaseData?.workoutType ?? 'Moderate exercise';
       }
       _fastingSuggestion = prefs.getString('fasting_suggestion') ??
           _getDefaultFastingForPhase(_currentPhase) ??
@@ -152,7 +152,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                   border: Border.all(color: Colors.blue.shade200),
                 ),
                 child: Text(
-                  _currentPhaseData?.workoutName ?? 'Moderate exercise',
+                  _currentPhaseData?.workoutType ?? 'Moderate exercise',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -248,7 +248,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${_getPhaseRange(_currentPhaseData?.name ?? 'Menstrual')} • ${_currentPhaseData?.workoutName ?? 'Unknown'}',
+                      '${_getPhaseRange(_currentPhaseData?.name ?? 'Menstrual')} • ${_currentPhaseData?.workoutType ?? 'Unknown'}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF666666),
@@ -281,7 +281,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                         suggestion: _nutritionSuggestion,
                         relatedGoals: _goals.where((g) => g.type == 'nutrition').toList(),
                         onEdit: () => _showEditDialog(
-                          _currentPhaseData?.dietName ?? 'Nutrition',
+                          _currentPhaseData?.dietType ?? 'Nutrition',
                           _nutritionSuggestion,
                           'nutrition_suggestion',
                         ),
@@ -298,7 +298,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => FitnessSuggestionsScreen(
-                              workoutType: _currentPhaseData?.workoutName ?? 'Fitness',
+                              workoutType: _currentPhaseData?.workoutType ?? 'Fitness',
                               phase: _currentPhase,
                               date: _today,
                             ),

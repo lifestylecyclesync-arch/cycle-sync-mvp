@@ -10,7 +10,6 @@ import '../utils/goal_manager.dart';
 import 'nutrition_meals_screen.dart';
 import 'fitness_suggestions_screen.dart';
 import 'fasting_suggestions_screen.dart';
-import 'lifestyle_preferences_screen.dart';
 import 'profile_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -1979,11 +1978,13 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     String dateStr = widget.date.toLocal().toString().split(' ')[0];
 
     // Get recommendations from phase data
-    final workoutPhase = _phaseData?.workoutPhase ?? 'Balanced';
-    final workoutEmoji = _phaseData?.workoutEmoji ?? '💪';
-    final nutritionApproach = _phaseData?.nutritionApproach ?? 'Balanced';
-    final nutritionEmoji = _phaseData?.nutritionEmoji ?? '🥗';
-    final fastingDetails = _phaseData?.fastingDetails ?? 'No specific recommendations';
+    final lifestylePhase = _phaseData?.lifestylePhase ?? 'Balanced';
+    final workoutType = _phaseData?.workoutType ?? '💪';
+    final dietType = _phaseData?.dietType ?? 'Balanced';
+    final fastingDuration = _phaseData?.fastingDuration ?? 'No fasting';
+    final guidanceNotes = _phaseData?.guidanceNotes ?? 'No specific recommendations';
+    final workoutEmoji = _phaseData?.workoutEmoji ?? '🏋️';
+    final nutritionEmoji = _phaseData?.nutritionEmoji ?? '🍽️';
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.6,
@@ -2077,13 +2078,11 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                       ),
                     ),
 
-                    const SizedBox(height: 20),
-
                     // 2. Workout Recommendation
                     _buildRecommendationCard(
                       title: 'Workout',
                       emoji: workoutEmoji,
-                      recommendation: workoutPhase,
+                      recommendation: workoutType,
                       backgroundColor: Colors.blue.shade50,
                       borderColor: Colors.blue.shade200,
                     ),
@@ -2094,7 +2093,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                     _buildRecommendationCard(
                       title: 'Diet',
                       emoji: nutritionEmoji,
-                      recommendation: nutritionApproach,
+                      recommendation: dietType,
                       backgroundColor: Colors.green.shade50,
                       borderColor: Colors.green.shade200,
                     ),
@@ -2105,7 +2104,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                     _buildRecommendationCard(
                       title: 'Fasting',
                       emoji: '⏱️',
-                      recommendation: fastingDetails,
+                      recommendation: fastingDuration,
                       backgroundColor: Colors.orange.shade50,
                       borderColor: Colors.orange.shade200,
                     ),
@@ -2245,7 +2244,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
 
   Widget _buildNutritionCircles() {
     String displayText = _selectedMeals.isEmpty
-        ? (_phaseData?.dietName ?? 'Balanced Nutrition')
+        ? (_phaseData?.dietType ?? 'Balanced Nutrition')
         : _selectedMeals.entries
             .map((e) => '${e.key.capitalize()}: ${e.value}')
             .join('\n');
@@ -2256,7 +2255,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
           context,
           MaterialPageRoute(
             builder: (context) => NutritionMealsScreen(
-              dietType: _phaseData?.dietName ?? 'Balanced Nutrition',
+              dietType: _phaseData?.dietType ?? 'Balanced Nutrition',
               phase: widget.phase,
               date: widget.date,
             ),
@@ -2330,7 +2329,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
 
   Widget _buildFitnessTile() {
     String displayText = _selectedWorkouts.isEmpty
-        ? (_phaseData?.workoutName ?? 'Moderate exercise')
+        ? (_phaseData?.workoutType ?? 'Moderate exercise')
         : _selectedWorkouts.join(', ');
 
     return GestureDetector(
@@ -2397,7 +2396,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
 
   Widget _buildFastingTile() {
     String displayText = _selectedFasting?.isEmpty ?? true
-        ? (_phaseData?.fastingType ?? 'No Fasting')
+        ? (_phaseData?.fastingDuration ?? 'No Fasting')
         : _selectedFasting!;
 
     return GestureDetector(
@@ -2857,7 +2856,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
       context,
       MaterialPageRoute(
         builder: (context) => FitnessSuggestionsScreen(
-          workoutType: _phaseData?.workoutName ?? 'Fitness',
+          workoutType: _phaseData?.workoutType ?? 'Fitness',
           phase: widget.phase,
           date: widget.date,
         ),
@@ -2875,7 +2874,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
       context,
       MaterialPageRoute(
         builder: (context) => FastingSuggestionsScreen(
-          fastingType: _phaseData?.fastingType ?? 'No Fasting',
+          fastingType: _phaseData?.fastingDuration ?? 'No Fasting',
           phase: widget.phase,
           date: widget.date,
         ),

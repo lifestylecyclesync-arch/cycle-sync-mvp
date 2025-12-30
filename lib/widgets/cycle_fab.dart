@@ -3,14 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Custom FAB Widget for Cycle Sync MVP
 /// Provides quick access to:
+/// - Log Period Start
 /// - Log Symptoms & Notes
 /// - Add Goal
 class CycleFAB extends StatefulWidget {
+  final VoidCallback onLogPeriod;
   final VoidCallback onLogSymptoms;
   final VoidCallback onAddGoal;
 
   const CycleFAB({
     super.key,
+    required this.onLogPeriod,
     required this.onLogSymptoms,
     required this.onAddGoal,
   });
@@ -96,6 +99,11 @@ class _CycleFABState extends State<CycleFAB>
     widget.onAddGoal();
   }
 
+  void _handleLogPeriod() {
+    _toggleFAB(); // Close the FAB menu
+    widget.onLogPeriod();
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -158,6 +166,23 @@ class _CycleFABState extends State<CycleFAB>
             ),
           ),
 
+        // Log Period FAB Item
+        ScaleTransition(
+          scale: _scaleAnimation,
+          child: Positioned(
+            bottom: 160,
+            right: 16,
+            child: FloatingActionButton(
+              heroTag: 'fab_period',
+              mini: true,
+              backgroundColor: Colors.red.shade400,
+              onPressed: _handleLogPeriod,
+              tooltip: 'Log Period Start',
+              child: const Icon(Icons.calendar_today, color: Colors.white),
+            ),
+          ),
+        ),
+
         // Log Symptoms FAB Item
         ScaleTransition(
           scale: _scaleAnimation,
@@ -179,7 +204,7 @@ class _CycleFABState extends State<CycleFAB>
         ScaleTransition(
           scale: _scaleAnimation,
           child: Positioned(
-            bottom: 160,
+            bottom: 230,
             right: 16,
             child: FloatingActionButton(
               heroTag: 'fab_goal',
