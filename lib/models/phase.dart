@@ -1,4 +1,14 @@
 /// Data model for menstrual cycle phases based on Dr. Mindy Pelz's cycle syncing framework.
+/// 
+/// THIS IS THE SINGLE SOURCE OF TRUTH for all cycle phase predictions:
+/// - Hormonal phases (from cycle_utils.getCyclePhase)
+/// - Workout phases (Power, Manifestation, Nurture)
+/// - Nutrition approaches (Ketobiotic, Hormone Feasting)
+/// - Fasting recommendations
+/// 
+/// IMPORTANT: Phase boundaries are defined by DAY-BASED LOGIC ONLY in getCyclePhase().
+/// Do NOT use percentages for phase predictions - they are inaccurate and cause misalignment.
+/// Use getCyclePhase() function with actual calendar dates.
 class Phase {
   final String name;
   final String emoji;
@@ -6,8 +16,14 @@ class Phase {
   final String dietName;
   final String workoutName;
   final String fastingType;
-  final double startPercentage; // Start of phase as % of cycle (0.0 - 1.0)
-  final double endPercentage;   // End of phase as % of cycle (0.0 - 1.0)
+  final String hormonalBasis; // Hormonal state description
+  final String workoutPhase; // Dr. Mindy's workout phase (Power/Manifestation/Nurture)
+  final String nutritionApproach; // Dr. Indy's nutrition approach (Ketobiotic/Hormone Feasting)
+  final String workoutEmoji;
+  final String nutritionEmoji;
+  final String fastingDetails; // Detailed IF recommendations by day
+  
+  // NOTE: Percentages removed. Use getCyclePhase() with actual dates for accurate phase prediction.
 
   const Phase({
     required this.name,
@@ -16,13 +32,13 @@ class Phase {
     required this.dietName,
     required this.workoutName,
     required this.fastingType,
-    required this.startPercentage,
-    required this.endPercentage,
+    required this.hormonalBasis,
+    required this.workoutPhase,
+    required this.nutritionApproach,
+    required this.workoutEmoji,
+    required this.nutritionEmoji,
+    required this.fastingDetails,
   });
-
-  /// Get the day range for this phase (e.g., "Days 1–5").
-  int get startDay => (startPercentage * 28).ceil();
-  int get endDay => (endPercentage * 28).floor();
 
   /// Get next phase in the cycle.
   String? get nextPhase {
@@ -32,27 +48,34 @@ class Phase {
     }
     return 'Menstrual'; // Loop back to menstrual phase
   }
-
-  /// Get day range for a specific cycle length.
-  /// For example, for a 28-day cycle: Days 1–5
-  String getDayRange(int cycleLength) {
-    int startDay = (startPercentage * cycleLength).ceil();
-    int endDay = (endPercentage * cycleLength).floor();
-    if (endDay < startDay) endDay = cycleLength;
-    return 'Days $startDay–$endDay';
-  }
-
-  /// Check if a given cycle day falls within this phase.
-  bool containsDay(int dayOfCycle, int cycleLength) {
-    int startDay = (startPercentage * cycleLength).ceil();
-    int endDay = (endPercentage * cycleLength).floor();
-    if (endDay < startDay) endDay = cycleLength;
-    return dayOfCycle >= startDay && dayOfCycle <= endDay;
-  }
 }
 
 /// Static list of phases based on Dr. Mindy Pelz's cycle syncing framework.
-/// Adapted for proportional calculations based on cycle length.
+/// THIS IS THE SINGLE SOURCE OF TRUTH for all phase predictions.
+/// 
+/// PHASE BOUNDARIES (Day-Based, from getCyclePhase()):
+/// - Menstrual:    Day 1 → menstrualLength
+/// - Follicular:   Day (menstrualLength + 1) → (ovulationDay - 2)
+/// - Ovulation:    Day (ovulationDay - 2) → (ovulationDay + 2) [5-day Manifestation window]
+/// UPDATED PHASE BOUNDARIES (NEW LOGIC):
+/// Using day-based boundaries with fixed 14-day luteal reference.
+/// ovulationDay (OD) = cycleLength - 14
+/// 
+/// - Menstrual:    Day 1 → menstrualLength
+/// - Follicular:   Day (menstrualLength + 1) → (ovulationDay - 2)
+/// - Ovulation:    Day (ovulationDay - 1) → (ovulationDay + 1)
+/// - Early Luteal: Day (ovulationDay + 2) → (ovulationDay + 5)
+/// - Late Luteal:  Day (ovulationDay + 6) → cycleLength
+/// 
+/// Example (28-day cycle, menstrualLength=5, ovulationDay=14):
+/// - Menstrual:    Days 1-5
+/// - Follicular:   Days 6-12
+/// - Ovulation:    Days 13-15 (3-day peak window: OD-1 to OD+1)
+/// - Early Luteal: Days 16-19
+/// - Late Luteal:  Days 20-28
+/// 
+/// ⚠️ DO NOT USE PERCENTAGES FOR PHASE PREDICTION!
+/// Use getCyclePhase(lastPeriodStart, cycleLength, today, menstrualLength) instead.
 class CyclePhases {
   static const List<Phase> phases = [
     Phase(
@@ -62,8 +85,12 @@ class CyclePhases {
       dietName: 'Restorative Nutrition',
       workoutName: 'Low-Impact Training',
       fastingType: 'Power Fasting',
-      startPercentage: 0.0,
-      endPercentage: 0.179, // Days 1–5 for 28-day cycle
+      hormonalBasis: 'Estrogen low, Progesterone declining',
+      workoutPhase: 'Power Phase',
+      nutritionApproach: 'Ketobiotic',
+      workoutEmoji: '💪',
+      nutritionEmoji: '🥗',
+      fastingDetails: 'IF 13-15h',
     ),
     Phase(
       name: 'Follicular',
@@ -72,8 +99,12 @@ class CyclePhases {
       dietName: 'Energizing Nutrition',
       workoutName: 'Mid-Impact Training',
       fastingType: 'Power Fasting',
-      startPercentage: 0.179,
-      endPercentage: 0.429, // Days 6–12 for 28-day cycle
+      hormonalBasis: 'Estrogen rising, FSH increasing',
+      workoutPhase: 'Power Phase (continued)',
+      nutritionApproach: 'Ketobiotic',
+      workoutEmoji: '💪',
+      nutritionEmoji: '🥗',
+      fastingDetails: 'IF 17h',
     ),
     Phase(
       name: 'Ovulation',
@@ -82,8 +113,12 @@ class CyclePhases {
       dietName: 'Light & Fresh',
       workoutName: 'Strength Training',
       fastingType: 'Manifestation Fasting',
-      startPercentage: 0.429,
-      endPercentage: 0.536, // Days 13–15 for 28-day cycle
+      hormonalBasis: 'Estrogen peak, LH surge',
+      workoutPhase: 'Manifestation Phase',
+      nutritionApproach: 'Hormone Feasting',
+      workoutEmoji: '✨',
+      nutritionEmoji: '🍲',
+      fastingDetails: 'IF 13h',
     ),
     Phase(
       name: 'Early Luteal',
@@ -92,8 +127,12 @@ class CyclePhases {
       dietName: 'Balanced Nutrition',
       workoutName: 'Mid-Impact Training',
       fastingType: 'Power Fasting',
-      startPercentage: 0.536,
-      endPercentage: 0.714, // Days 16–20 for 28-day cycle
+      hormonalBasis: 'Progesterone rising, estrogen stable',
+      workoutPhase: 'Power Phase (again)',
+      nutritionApproach: 'Ketobiotic',
+      workoutEmoji: '💪',
+      nutritionEmoji: '🥗',
+      fastingDetails: 'IF 15h',
     ),
     Phase(
       name: 'Luteal',
@@ -102,8 +141,12 @@ class CyclePhases {
       dietName: 'Calming Nutrition',
       workoutName: 'Mid- to Low-Impact Training',
       fastingType: 'Nurture Fasting',
-      startPercentage: 0.714,
-      endPercentage: 1.0, // Days 20–28 for 28-day cycle
+      hormonalBasis: 'Progesterone dominant, metabolism elevated',
+      workoutPhase: 'Nurture Phase',
+      nutritionApproach: 'Hormone Feasting',
+      workoutEmoji: '🌸',
+      nutritionEmoji: '🍲',
+      fastingDetails: 'No IF - eat regularly',
     ),
   ];
 
@@ -117,20 +160,19 @@ class CyclePhases {
   }
 
   /// Find phase for a given cycle day.
+  /// ⚠️ DEPRECATED: Use getCyclePhase() instead for accurate predictions!
+  /// This method is no longer recommended due to percentage-based calculations.
+  @Deprecated('Use getCyclePhase() from cycle_utils.dart instead')
   static Phase? findPhaseForDay(int dayOfCycle, int cycleLength) {
-    try {
-      return phases.firstWhere((phase) => phase.containsDay(dayOfCycle, cycleLength));
-    } catch (e) {
-      return null;
-    }
+    // Not implemented - use getCyclePhase() instead
+    return null;
   }
 
   /// Get all phase day ranges for a specific cycle length.
+  /// ⚠️ DEPRECATED: Percentages should not be used for phase boundaries.
+  /// Use getCyclePhase() with actual dates instead.
+  @Deprecated('Use getCyclePhase() from cycle_utils.dart instead')
   static Map<String, String> getAllPhaseRanges(int cycleLength) {
-    Map<String, String> ranges = {};
-    for (Phase phase in phases) {
-      ranges[phase.name] = phase.getDayRange(cycleLength);
-    }
-    return ranges;
+    return {}; // Not implemented - use getCyclePhase() instead
   }
 }

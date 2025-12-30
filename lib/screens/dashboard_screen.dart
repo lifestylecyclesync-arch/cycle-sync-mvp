@@ -24,6 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cycle data
   late DateTime _lastPeriodStart;
   late int _cycleLength;
+  late int _menstrualLength;
   bool _isLoading = true;
   List<Goal> _goals = [];
   int _avatarRefreshKey = 0; // Trigger FutureBuilder refresh
@@ -97,6 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             setState(() {
               _lastPeriodStart = latestCycle.startDate;
               _cycleLength = latestCycle.cycleLength;
+              _menstrualLength = latestCycle.periodLength;
               _isLoading = false;
             });
             return;
@@ -117,6 +119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : DateTime(2024, 11, 28);
 
     _cycleLength = prefs.getInt('cycleLength') ?? 28;
+    _menstrualLength = prefs.getInt('periodLength') ?? 5;
 
     setState(() {
       _isLoading = false;
@@ -193,7 +196,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _getCurrentPhase() {
-    return getCyclePhase(_lastPeriodStart, _cycleLength, DateTime.now());
+    return getCyclePhase(_lastPeriodStart, _cycleLength, DateTime.now(),
+        menstrualLength: _menstrualLength);
+  }
+
+  int _getDaysUntilNextPeriod() {
+    DateTime nextPeriod = getNextPeriodDate(_lastPeriodStart, _cycleLength);
+    return DateTime(nextPeriod.year, nextPeriod.month, nextPeriod.day)
+        .difference(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day))
+        .inDays;
+  }
+
+  /// Get dynamic phase day ranges based on cycle length and menstrual length
+  /// Uses adaptive calculation: ovulationDay = cycleLength - 14
+  /// Phase boundaries from new table:
+  /// - Menstrual: Day 1–periodLength
+  /// - Follicular: Day (periodLength+1)–(ovulationDay-2)
+  /// - Ovulation: Day (ovulationDay-1)–(ovulationDay+1)
+  /// - Early Luteal: Day (ovulationDay+2)–(ovulationDay+5)
+  /// - Luteal: Day (ovulationDay+6)–cycleLength
+  Map<String, String> _getPhaseRanges() {
+    final ovulationDay = _cycleLength - 14; // Fixed luteal length = 14
+    
+    return {
+      'Menstrual': '1–$_menstrualLength',
+      'Follicular': '${_menstrualLength + 1}–${ovulationDay - 2}',
+      'Ovulation': '${ovulationDay - 1}–${ovulationDay + 1}',
+      'Early Luteal': '${ovulationDay + 2}–${ovulationDay + 5}',
+      'Luteal': '${ovulationDay + 6}–$_cycleLength',
+    };
   }
 
   Color _getPhaseColor(String phase) {
@@ -236,13 +267,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            _getCurrentPhase(),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                _getCurrentPhase(),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Show next period countdown
+                              Text(
+                                'Period in ${_getDaysUntilNextPeriod()} days',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -444,89 +489,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Daily Recommendations
+  // Daily Recommendations with Phase Guidance
   Widget _buildDailyRecommendationsCard() {
-    phase_model.Phase? phase = phase_model.CyclePhases.findPhaseByName(_getCurrentPhase());
+    String currentPhase = _getCurrentPhase();
+    phase_model.Phase? phaseData = phase_model.CyclePhases.findPhaseByName(currentPhase);
+    Map<String, String> guidance = getPhaseGuidance(currentPhase);
 
-    if (phase == null) return const SizedBox.shrink();
+    if (phaseData == null) return const SizedBox.shrink();
 
-    final recommendations = [
-      {'emoji': '🍎', 'title': 'Nutrition', 'value': phase.dietName},
-      {'emoji': '🏋️', 'title': 'Fitness', 'value': phase.workoutName},
-      {'emoji': '⏱️', 'title': 'Fasting', 'value': phase.fastingType},
-    ];
-
-    return GestureDetector(
-      onTap: _showTodayDetail,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Today\'s Recommendations',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF333333),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Today\'s Guidance',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey),
+          ),
+          const SizedBox(height: 12),
+          
+          // Hormonal State
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-            const SizedBox(height: 10),
-            Column(
-              children: recommendations
-                  .asMap()
-                  .entries
-                  .map((entry) {
-                    int index = entry.key;
-                    Map<String, dynamic> rec = entry.value;
-
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        bottom: index < recommendations.length - 1 ? 8 : 0,
+            child: Row(
+              children: [
+                const Text('🧬', style: TextStyle(fontSize: 18)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Hormonal State',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
                       ),
-                      child: Row(
+                      const SizedBox(height: 2),
+                      Text(
+                        guidance['hormonal'] ?? 'Loading...',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Workout & Nutrition Side by Side
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            rec['emoji'] as String,
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(width: 10),
+                          Text(getWorkoutPhaseEmoji(guidance['workout'] ?? ''), style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  rec['title'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF999999),
-                                  ),
-                                ),
-                                Text(
-                                  rec['value'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF333333),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
+                            child: Text(
+                              'Workout',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
                             ),
                           ),
                         ],
                       ),
-                    );
-                  })
-                  .toList(),
-            ),
-          ],
-        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        guidance['workout'] ?? 'Balanced',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(getNutritionPhaseEmoji(guidance['nutrition'] ?? ''), style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Nutrition',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        guidance['nutrition'] ?? 'Balanced',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -573,7 +662,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 2),
                   if (phase != null)
                     Text(
-                      phase.getDayRange(_cycleLength),
+                      _getPhaseRanges()[phase.name] ?? 'N/A',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey.shade600,
@@ -716,6 +805,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               painter: HormonalCurvePainter(
                 cycleLength: _cycleLength,
                 currentDay: currentDay,
+                menstrualLength: _menstrualLength,
               ),
               size: Size.infinite,
             ),
@@ -724,10 +814,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildPhaseLabel('Menstrual', '1-5', _getPhaseColor('Menstrual')),
-              _buildPhaseLabel('Follicular', '6-12', _getPhaseColor('Follicular')),
-              _buildPhaseLabel('Ovulation', '13-15', _getPhaseColor('Ovulation')),
-              _buildPhaseLabel('Luteal', '16-28', _getPhaseColor('Luteal')),
+              _buildPhaseLabel('Menstrual', _getPhaseRanges()['Menstrual']!, _getPhaseColor('Menstrual')),
+              _buildPhaseLabel('Follicular', _getPhaseRanges()['Follicular']!, _getPhaseColor('Follicular')),
+              _buildPhaseLabel('Ovulation', _getPhaseRanges()['Ovulation']!, _getPhaseColor('Ovulation')),
+              _buildPhaseLabel('Luteal', _getPhaseRanges()['Luteal']!, _getPhaseColor('Luteal')),
             ],
           ),
         ],
@@ -894,10 +984,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class HormonalCurvePainter extends CustomPainter {
   final int cycleLength;
   final int currentDay;
+  final int menstrualLength;
 
   HormonalCurvePainter({
     required this.cycleLength,
     required this.currentDay,
+    required this.menstrualLength,
   });
 
   @override
@@ -908,15 +1000,29 @@ class HormonalCurvePainter extends CustomPainter {
     final startX = padding;
     final startY = padding;
 
-    // Draw phase backgrounds
-    final menstrualEnd = (5 / cycleLength) * graphWidth;
-    final follicularEnd = (12 / cycleLength) * graphWidth;
-    final ovulationEnd = (15 / cycleLength) * graphWidth;
+    // Calculate phase boundaries using adaptive formula with NEW boundaries:
+    // - Menstrual: Day 1 → menstrualLength
+    // - Follicular: Day (menstrualLength + 1) → (ovulationDay - 2)
+    // - Ovulation: Day (ovulationDay - 1) → (ovulationDay + 1)
+    // - Early Luteal: Day (ovulationDay + 2) → (ovulationDay + 5)
+    // - Luteal: Day (ovulationDay + 6) → cycleLength
+    final ovulationDay = cycleLength - 14;
+    final menstrualEndDay = menstrualLength;
+    final follicularEndDay = ovulationDay - 2;
+    final ovulationEndDay = ovulationDay + 1;
+    final earlyLutealEndDay = ovulationDay + 5;
+
+    // Draw phase backgrounds (proportional to cycle length)
+    final menstrualEnd = (menstrualEndDay / cycleLength) * graphWidth;
+    final follicularEnd = (follicularEndDay / cycleLength) * graphWidth;
+    final ovulationEnd = (ovulationEndDay / cycleLength) * graphWidth;
+    final earlyLutealEnd_px = (earlyLutealEndDay / cycleLength) * graphWidth;
 
     _drawPhaseBackground(canvas, startX, startY, menstrualEnd, graphHeight, Color(0xFFFFE8E8));
     _drawPhaseBackground(canvas, startX + menstrualEnd, startY, follicularEnd - menstrualEnd, graphHeight, Color(0xFFFFF5E1));
     _drawPhaseBackground(canvas, startX + follicularEnd, startY, ovulationEnd - follicularEnd, graphHeight, Color(0xFFFFF0F7));
-    _drawPhaseBackground(canvas, startX + ovulationEnd, startY, graphWidth - ovulationEnd, graphHeight, Color(0xFFF5F0FF));
+    _drawPhaseBackground(canvas, startX + ovulationEnd, startY, earlyLutealEnd_px - ovulationEnd, graphHeight, Color(0xFFE8D8F8));
+    _drawPhaseBackground(canvas, startX + earlyLutealEnd_px, startY, graphWidth - earlyLutealEnd_px, graphHeight, Color(0xFFF5F0FF));
 
     // Draw grid lines
     for (int i = 1; i < 4; i++) {
@@ -931,7 +1037,7 @@ class HormonalCurvePainter extends CustomPainter {
     }
 
     // Draw phase dividers
-    for (final x in [menstrualEnd, follicularEnd, ovulationEnd]) {
+    for (final x in [menstrualEnd, follicularEnd, ovulationEnd, earlyLutealEnd_px]) {
       canvas.drawLine(
         Offset(startX + x, startY),
         Offset(startX + x, startY + graphHeight),
@@ -948,7 +1054,7 @@ class HormonalCurvePainter extends CustomPainter {
       startY,
       graphWidth,
       graphHeight,
-      _getEstrogen,
+      (day) => _getEstrogen(day, menstrualLength, ovulationDay),
       Color(0xFFE91E63),
       'Estrogen',
     );
@@ -959,7 +1065,7 @@ class HormonalCurvePainter extends CustomPainter {
       startY,
       graphWidth,
       graphHeight,
-      _getProgesterone,
+      (day) => _getProgesterone(day, menstrualLength, ovulationDay),
       Color(0xFFFFA500),
       'Progesterone',
     );
@@ -1090,19 +1196,38 @@ class HormonalCurvePainter extends CustomPainter {
   }
 
   // Estrogen pattern: low in menstrual, rises in follicular, peaks at ovulation, drops in luteal
-  double _getEstrogen(int day) {
-    if (day >= 1 && day <= 5) return 0.2; // Menstrual: low
-    if (day >= 6 && day <= 12) return 0.2 + (day - 6) * 0.1; // Follicular: rising
-    if (day >= 13 && day <= 15) return 0.8; // Ovulation: peak
-    if (day >= 16 && day <= 28) return 0.8 - (day - 15) * 0.025; // Luteal: declining
+  double _getEstrogen(int day, int menstrualLength, int ovulationDay) {
+    if (day >= 1 && day <= menstrualLength) return 0.2; // Menstrual: low
+    if (day > menstrualLength && day < ovulationDay) {
+      // Follicular: rising
+      final follicularLength = ovulationDay - menstrualLength - 1;
+      final progress = (day - menstrualLength) / follicularLength;
+      return 0.2 + (progress * 0.6); // Rise from 0.2 to 0.8
+    }
+    if (day == ovulationDay) return 0.8; // Ovulation: peak
+    if (day > ovulationDay && day <= cycleLength) {
+      // Luteal: declining
+      final lutealLength = cycleLength - ovulationDay;
+      final progress = (day - ovulationDay) / lutealLength;
+      return 0.8 - (progress * 0.6); // Decline from 0.8 to 0.2
+    }
     return 0.2;
   }
 
   // Progesterone pattern: low until ovulation, then rises in luteal
-  double _getProgesterone(int day) {
-    if (day >= 1 && day <= 14) return 0.1; // Low until ovulation
-    if (day >= 15 && day <= 21) return 0.1 + (day - 14) * 0.08; // Rising in luteal
-    if (day >= 22 && day <= 28) return 0.7 - (day - 21) * 0.1; // Declining
+  double _getProgesterone(int day, int menstrualLength, int ovulationDay) {
+    if (day <= ovulationDay) return 0.1; // Low until ovulation
+    if (day > ovulationDay && day <= ovulationDay + 7) {
+      // Rising in luteal (first 7 days)
+      final progress = (day - ovulationDay) / 7;
+      return 0.1 + (progress * 0.6); // Rise from 0.1 to 0.7
+    }
+    if (day > ovulationDay + 7) {
+      // Declining in late luteal
+      final declineLength = cycleLength - (ovulationDay + 7);
+      final progress = (day - (ovulationDay + 7)) / declineLength;
+      return 0.7 - (progress * 0.6); // Decline from 0.7 to 0.1
+    }
     return 0.1;
   }
 

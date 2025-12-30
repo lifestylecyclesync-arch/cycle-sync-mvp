@@ -1,189 +1,106 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cycle_sync_mvp/models/phase.dart';
+import 'package:cycle_sync_mvp/utils/cycle_utils.dart';
 
 void main() {
   group('Phase Detection Tests', () {
-    test('Phase boundaries are contiguous with no gaps', () {
-      Phase phase1 = CyclePhases.phases[0];
-      Phase phase2 = CyclePhases.phases[1];
-      Phase phase3 = CyclePhases.phases[2];
-      Phase phase4 = CyclePhases.phases[3];
-      Phase phase5 = CyclePhases.phases[4];
-
-      // Verify each phase starts where previous ends
-      expect(phase2.startPercentage, phase1.endPercentage);
-      expect(phase3.startPercentage, phase2.endPercentage);
-      expect(phase4.startPercentage, phase3.endPercentage);
-      expect(phase5.startPercentage, phase4.endPercentage);
-
-      // Verify last phase ends at 100%
-      expect(phase5.endPercentage, 1.0);
-
-      // Verify first phase starts at 0%
-      expect(phase1.startPercentage, 0.0);
+    test('All 5 phases exist with correct names', () {
+      expect(CyclePhases.phases.length, 5);
+      expect(CyclePhases.phases[0].name, 'Menstrual');
+      expect(CyclePhases.phases[1].name, 'Follicular');
+      expect(CyclePhases.phases[2].name, 'Ovulation');
+      expect(CyclePhases.phases[3].name, 'Early Luteal');
+      expect(CyclePhases.phases[4].name, 'Luteal');
     });
 
-    test('All cycle days are covered by phases', () {
-      double coverage = 0.0;
+    test('All phases have required properties', () {
       for (Phase phase in CyclePhases.phases) {
-        coverage += (phase.endPercentage - phase.startPercentage);
+        expect(phase.name.isNotEmpty, true);
+        expect(phase.emoji.isNotEmpty, true);
+        expect(phase.description.isNotEmpty, true);
+        expect(phase.hormonalBasis.isNotEmpty, true);
+        expect(phase.workoutPhase.isNotEmpty, true);
+        expect(phase.nutritionApproach.isNotEmpty, true);
+        expect(phase.fastingDetails.isNotEmpty, true);
       }
-      expect(coverage, closeTo(1.0, 0.01));
     });
 
     test('Detect correct phase for day 1 (Menstrual)', () {
+      DateTime lastPeriodStart = DateTime(2025, 12, 15);
       int cycleLength = 28;
-      int dayNumber = 1;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
+      int menstrualLength = 5;
+      DateTime dayOne = DateTime(2025, 12, 15);
 
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
+      String phase = getCyclePhase(lastPeriodStart, cycleLength, dayOne,
+          menstrualLength: menstrualLength);
 
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Menstrual');
-      expect(detectedPhase.workoutName, 'Low-Impact Training');
+      expect(phase, 'Menstrual');
+      
+      Phase? phaseData = CyclePhases.findPhaseByName(phase);
+      expect(phaseData?.workoutName, 'Low-Impact Training');
     });
 
     test('Detect correct phase for day 7 (Follicular)', () {
+      DateTime lastPeriodStart = DateTime(2025, 12, 15);
       int cycleLength = 28;
-      int dayNumber = 7;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
+      int menstrualLength = 5;
+      DateTime dayNine = DateTime(2025, 12, 21); // Day 7 of cycle
 
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
+      String phase = getCyclePhase(lastPeriodStart, cycleLength, dayNine,
+          menstrualLength: menstrualLength);
 
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Follicular');
-      expect(detectedPhase.workoutName, 'Mid-Impact Training');
+      expect(phase, 'Follicular');
+      
+      Phase? phaseData = CyclePhases.findPhaseByName(phase);
+      expect(phaseData?.workoutName, 'Mid-Impact Training');
     });
 
     test('Detect correct phase for day 14 (Ovulation)', () {
+      DateTime lastPeriodStart = DateTime(2025, 12, 15);
       int cycleLength = 28;
-      int dayNumber = 14;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
+      int menstrualLength = 5;
+      DateTime day14 = DateTime(2025, 12, 28); // Day 14 of cycle
 
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
+      String phase = getCyclePhase(lastPeriodStart, cycleLength, day14,
+          menstrualLength: menstrualLength);
 
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Ovulation');
-      expect(detectedPhase.workoutName, 'Strength Training');
+      expect(phase, 'Ovulation');
+      
+      Phase? phaseData = CyclePhases.findPhaseByName(phase);
+      expect(phaseData?.workoutName, 'Strength Training');
     });
 
-    test('Detect correct phase for day 18 (Early Luteal)', () {
+    test('5-day ovulation window (OD-2 to OD+2)', () {
+      DateTime lastPeriodStart = DateTime(2025, 12, 15);
       int cycleLength = 28;
-      int dayNumber = 18;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
-
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
+      int menstrualLength = 5;
+      
+      // OD = 14, so ovulation should be Days 12-16
+      for (int day = 12; day <= 16; day++) {
+        DateTime dateToCheck = lastPeriodStart.add(Duration(days: day - 1));
+        String phase = getCyclePhase(lastPeriodStart, cycleLength, dateToCheck,
+            menstrualLength: menstrualLength);
+        expect(phase, 'Ovulation', 
+            reason: 'Day $day should be Ovulation phase');
       }
-
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Early Luteal');
-      expect(detectedPhase.workoutName, 'Mid-Impact Training');
     });
 
-    test('Detect correct phase for day 23 (Luteal)', () {
+    test('Follicular phase ends before ovulation', () {
+      DateTime lastPeriodStart = DateTime(2025, 12, 15);
       int cycleLength = 28;
-      int dayNumber = 23;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
-
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
-
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Luteal');
-      expect(detectedPhase.workoutName, 'Mid- to Low-Impact Training');
-    });
-
-    test('Phase detection works for 25-day cycle', () {
-      int cycleLength = 25;
-      int dayNumber = 1;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
-
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
-
-      expect(detectedPhase, isNotNull);
-      expect(detectedPhase!.name, 'Menstrual');
-    });
-
-    test('Phase detection works for 35-day cycle', () {
-      int cycleLength = 35;
-      int dayNumber = 35;
-      double dayPercentage = (dayNumber - 1) / cycleLength;
-
-      Phase? detectedPhase;
-      for (Phase phase in CyclePhases.phases) {
-        if (dayPercentage >= phase.startPercentage &&
-            dayPercentage < phase.endPercentage) {
-          detectedPhase = phase;
-          break;
-        }
-      }
-
-      expect(detectedPhase, isNotNull);
-    });
-
-    test('Day range calculation for 28-day cycle', () {
-      Phase menstrual = CyclePhases.phases[0];
-      expect(menstrual.getDayRange(28), 'Days 1–5');
-    });
-
-    test('Day range calculation for 32-day cycle', () {
-      Phase menstrual = CyclePhases.phases[0];
-      expect(menstrual.getDayRange(32), 'Days 1–6');
-    });
-
-    test('All phases have valid percentage ranges', () {
-      for (Phase phase in CyclePhases.phases) {
-        expect(phase.startPercentage >= 0.0, true);
-        expect(phase.endPercentage <= 1.0, true);
-        expect(phase.endPercentage > phase.startPercentage, true);
-      }
-    });
-
-    test('Phase names are not empty', () {
-      for (Phase phase in CyclePhases.phases) {
-        expect(phase.name.isNotEmpty, true);
-        expect(phase.workoutName.isNotEmpty, true);
-      }
+      int menstrualLength = 5;
+      
+      // Day 11 should be Follicular, Day 12 should be Ovulation
+      DateTime day11 = lastPeriodStart.add(Duration(days: 10));
+      DateTime day12 = lastPeriodStart.add(Duration(days: 11));
+      
+      String phaseDay11 = getCyclePhase(lastPeriodStart, cycleLength, day11,
+          menstrualLength: menstrualLength);
+      String phaseDay12 = getCyclePhase(lastPeriodStart, cycleLength, day12,
+          menstrualLength: menstrualLength);
+      
+      expect(phaseDay11, 'Follicular');
+      expect(phaseDay12, 'Ovulation');
     });
   });
 }

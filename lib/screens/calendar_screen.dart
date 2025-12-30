@@ -27,6 +27,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   // Cycle data loaded from SharedPreferences
   late DateTime _lastPeriodStart;
   late int _cycleLength;
+  late int _menstrualLength;
   bool _isLoading = true;
 
   // Filter state
@@ -232,6 +233,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         : DateTime(2024, 11, 28);
 
     _cycleLength = prefs.getInt('cycleLength') ?? 28;
+    _menstrualLength = prefs.getInt('periodLength') ?? 5;
 
     setState(() {
       _isLoading = false;
@@ -244,15 +246,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   String _getCurrentPhase() {
-    return getCyclePhase(_lastPeriodStart, _cycleLength, DateTime.now());
+    return getCyclePhase(_lastPeriodStart, _cycleLength, DateTime.now(),
+        menstrualLength: _menstrualLength);
   }
 
   String _getCyclePhase(DateTime day) {
-    return getCyclePhase(_lastPeriodStart, _cycleLength, day);
+    return getCyclePhase(_lastPeriodStart, _cycleLength, day,
+        menstrualLength: _menstrualLength);
+  }
+
+  bool _isFertileWindow(DateTime day) {
+    return isFertileWindow(_lastPeriodStart, _cycleLength, day);
   }
 
   int _getOvulationDay() {
-    return (_cycleLength ~/ 2);
+    return getOvulationDay(_cycleLength);
   }
 
   String _getInitials(String name) {
@@ -543,6 +551,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         phase: phase,
         lastPeriodStart: _lastPeriodStart,
         cycleLength: _cycleLength,
+        menstrualLength: _menstrualLength,
         filteredGoals: filteredGoals,
         goalCompletions: _goalCompletions,
         onGoalCompletionChanged: _onGoalCompletionChanged,
@@ -1109,19 +1118,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
         backgroundColor: Colors.transparent,
         body: Column(
           children: [
-            // Fixed Header - Standardized Gradient Styling
+            // Minimalist Header - No Gradient
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.3),
-                    _getPhaseColor(_getCurrentPhase()).withValues(alpha: 0.15),
-                  ],
-                ),
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
               ),
               child: SafeArea(
                 bottom: false,
@@ -1139,15 +1141,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               fontSize: 22,
                               color: Color(0xFF333333),
                               fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             _getPhaseExtension(),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF666666),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -1357,6 +1358,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 1);
                         int ovulationDay = _getOvulationDay();
                         bool isOvulationDay = dayInCycle == ovulationDay;
+                        bool isFertile = _isFertileWindow(day);
 
                         // Check if goal is completed on this day
                         bool isGoalCompleted = false;
@@ -1380,16 +1382,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: _getFilteredDayColor(day),
-                              boxShadow: isToday
-                                  ? [
-                                      BoxShadow(
-                                        color: _getFilteredDayColor(day)
-                                            .withValues(alpha: 0.5),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      ),
-                                    ]
-                                  : null,
+                              border: isToday ? Border.all(color: Colors.blue, width: 2) : 
+                                     isFertile ? Border.all(color: Colors.green, width: 1.5) : null,
                             ),
                             child: Stack(
                               alignment: Alignment.center,
@@ -1531,11 +1525,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   String _getPhaseExtension() {
     String currentPhase = _getCurrentPhase();
-    Phase? phase = CyclePhases.findPhaseByName(currentPhase);
-    if (phase != null) {
-      return phase.getDayRange(_cycleLength);
-    }
-    return 'Day $_cycleLength - last cycle day';
+    // Use the new phase ranges with updated boundaries:
+    // - Menstrual: Day 1–periodLength
+    // - Follicular: Day (periodLength+1)–(ovulationDay-2)
+    // - Ovulation: Day (ovulationDay-1)–(ovulationDay+1)
+    // - Early Luteal: Day (ovulationDay+2)–(ovulationDay+5)
+    // - Luteal: Day (ovulationDay+6)–cycleLength
+    final ovulationDay = _cycleLength - 14;
+    
+    Map<String, String> ranges = {
+      'Menstrual': 'Days 1–$_menstrualLength',
+      'Follicular': 'Days ${_menstrualLength + 1}–${ovulationDay - 2}',
+      'Ovulation': 'Days ${ovulationDay - 1}–${ovulationDay + 1}',
+      'Early Luteal': 'Days ${ovulationDay + 2}–${ovulationDay + 5}',
+      'Luteal': 'Days ${ovulationDay + 6}–$_cycleLength',
+    };
+    
+    return ranges[currentPhase] ?? 'Day $_cycleLength - last cycle day';
   }
 }
 
@@ -1545,6 +1551,7 @@ class DayDetailsModal extends StatefulWidget {
   final String phase;
   final DateTime lastPeriodStart;
   final int cycleLength;
+  final int menstrualLength;
   final List<Goal> filteredGoals;
   final Map<String, Map<DateTime, bool>> goalCompletions;
   final Function(String, DateTime, bool) onGoalCompletionChanged;
@@ -1557,6 +1564,7 @@ class DayDetailsModal extends StatefulWidget {
     required this.phase,
     required this.lastPeriodStart,
     required this.cycleLength,
+    required this.menstrualLength,
     this.filteredGoals = const [],
     required this.goalCompletions,
     required this.onGoalCompletionChanged,
@@ -1602,6 +1610,11 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     if (widget.filteredGoals.isNotEmpty) {
       _currentProgressMetrics = _calculateGoalProgress();
     }
+  }
+
+  String _getNextPeriodDateFormatted() {
+    final nextPeriodDate = getNextPeriodDate(widget.lastPeriodStart, widget.cycleLength);
+    return '${nextPeriodDate.month}/${nextPeriodDate.day}';
   }
 
   Map<String, dynamic> _calculateGoalProgress() {
@@ -1965,8 +1978,15 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
         1;
     String dateStr = widget.date.toLocal().toString().split(' ')[0];
 
+    // Get recommendations from phase data
+    final workoutPhase = _phaseData?.workoutPhase ?? 'Balanced';
+    final workoutEmoji = _phaseData?.workoutEmoji ?? '💪';
+    final nutritionApproach = _phaseData?.nutritionApproach ?? 'Balanced';
+    final nutritionEmoji = _phaseData?.nutritionEmoji ?? '🥗';
+    final fastingDetails = _phaseData?.fastingDetails ?? 'No specific recommendations';
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.95,
+      height: MediaQuery.of(context).size.height * 0.6,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
@@ -1977,74 +1997,81 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
       child: SafeArea(
         child: Column(
           children: [
+            // Header with close button
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Cycle Day Details',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close, color: Colors.grey, size: 24),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
             // Scrollable Content
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Phase Card - Compact Header
+                    // 1. Cycle Day & Phase
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16.0),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            getPhaseColor(widget.phase),
-                            getPhaseColor(widget.phase).withValues(alpha: 0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      _phaseData?.emoji ?? '🌙',
-                                      style: const TextStyle(fontSize: 32),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            widget.phase,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF333333),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'Day $dayOfCycle • $dateStr',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Color(0xFF666666),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                          Text(
+                            _phaseData?.emoji ?? '🌙',
+                            style: const TextStyle(fontSize: 40),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cycle Day $dayOfCycle',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF333333),
+                                  ),
                                 ),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.pop(context),
-                                child: const Icon(Icons.close,
-                                    color: Colors.white, size: 24),
-                              ),
-                            ],
+                                Text(
+                                  widget.phase,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF666666),
+                                  ),
+                                ),
+                                Text(
+                                  dateStr,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF999999),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -2052,392 +2079,35 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
 
                     const SizedBox(height: 20),
 
-                    // No Goal Message (for manual filters without active goal)
-                    if (widget.noGoalMessage.isNotEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.shade300),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              widget.noGoalMessage,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF666666),
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                // Navigate to profile to set goal
-                                Navigator.pushNamed(context, '/profile');
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.amber.shade600,
-                              ),
-                              child: const Text('Set Goal'),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (widget.filteredGoals.isEmpty && widget.phase != 'default')
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: const Text(
-                          'Select a goal category to track progress',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF999999),
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-
-                    const SizedBox(height: 20),
-
-                    // Progress Metrics Section
-                    if (widget.filteredGoals.isNotEmpty && _currentProgressMetrics.isNotEmpty) ...[
-                      Container(
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.purple.shade50,
-                              Colors.purple.shade100.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.purple.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Progress',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF333333),
-                                  ),
-                                ),
-                                Text(
-                                  '${_currentProgressMetrics['percentage']}%',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.purple.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: (_currentProgressMetrics['completed'] ?? 0) / (_currentProgressMetrics['total'] ?? 1),
-                                minHeight: 8,
-                                backgroundColor: Colors.grey.shade300,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.purple.shade400,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _currentProgressMetrics['message'] ?? '',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF666666),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-
-                    // Goal Completion Section
-                    if (widget.filteredGoals.isNotEmpty) ...[
-                      Text(
-                        'Daily Goals',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF333333),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...widget.filteredGoals.map((goal) {
-                        final dateKey = DateTime(widget.date.year, widget.date.month, widget.date.day);
-                        final isCompleted = widget.goalCompletions[goal.id]?[dateKey] ?? false;
-                        
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10.0),
-                          child: GestureDetector(
-                            onTap: () async {
-                              await widget.onGoalCompletionChanged(goal.id, widget.date, !isCompleted);
-                              _updateProgressMetrics();
-                              setState(() {});
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(12.0),
-                              decoration: BoxDecoration(
-                                color: isCompleted ? Colors.green.shade50 : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isCompleted ? Colors.green.shade300 : Colors.grey.shade300,
-                                  width: isCompleted ? 2 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: isCompleted ? Colors.green : Colors.transparent,
-                                      border: Border.all(
-                                        color: isCompleted ? Colors.green : Colors.grey.shade400,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: isCompleted
-                                        ? const Icon(Icons.check, size: 16, color: Colors.white)
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          goal.name,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF333333),
-                                            decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                          ),
-                                        ),
-                                        if (goal.amount.isNotEmpty)
-                                          Text(
-                                            goal.amount,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (isCompleted)
-                                    const Icon(Icons.check_circle, color: Colors.green, size: 24),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      const SizedBox(height: 18),
-                    ],
-
-                    // Description Section
-                    if (_phaseData != null) ...[
-                      Text(
-                        'Energy Level',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF666666),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _phaseData!.description,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF333333),
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                    ],
-
-                    // Recommendations Section
-                    Text(
-                      'Your Lifestyle Plan',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
-                      ),
+                    // 2. Workout Recommendation
+                    _buildRecommendationCard(
+                      title: 'Workout',
+                      emoji: workoutEmoji,
+                      recommendation: workoutPhase,
+                      backgroundColor: Colors.blue.shade50,
+                      borderColor: Colors.blue.shade200,
                     ),
-                    const SizedBox(height: 12),
 
-                    if (_nutrition) ...[
-                      _buildNutritionCircles(),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_fitness) ...[
-                      _buildFitnessTile(),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_fasting) ...[
-                      _buildFastingTile(),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_mood) ...[
-                      _buildDashboardTile(
-                        emoji: '😊',
-                        title: 'Mood & Productivity',
-                        subtitle: 'Balance your energy',
-                        value: _phaseData?.description ?? 'Focus on balance',
-                        onEdit: null,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_wellness) ...[
-                      _buildDashboardTile(
-                        emoji: '🌙',
-                        title: 'Wellness',
-                        subtitle: 'Rest & Recovery',
-                        value: 'Prioritize sleep and hydration',
-                        onEdit: null,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                    const SizedBox(height: 16),
 
-                    if (_nutrition || _fitness || _fasting || _mood || _wellness) ...[
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LifestylePreferencesScreen(),
-                              ),
-                            ).then((result) {
-                              if (result == true && mounted) {
-                                // Reload preferences when returning
-                                setState(() {});
-                                _loadUserPreferences();
-                              }
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: const Color(0xFF333333),
-                            elevation: 0,
-                            side: const BorderSide(
-                                color: Color(0xFF333333), width: 1.5),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text('Track More Stuff'),
-                        ),
-                      ),
-                    ],
-
-                    if (!_nutrition && !_fitness && !_fasting && !_mood && !_wellness) ...[
-                      const SizedBox(height: 24),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.amber.shade200),
-                        ),
-                        child: Text(
-                          'No lifestyle preferences selected. Update your preferences in settings to see personalized recommendations.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.amber.shade900,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    // Collapsible Panels Section
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Day Details',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
-                      ),
+                    // 3. Diet Recommendation
+                    _buildRecommendationCard(
+                      title: 'Diet',
+                      emoji: nutritionEmoji,
+                      recommendation: nutritionApproach,
+                      backgroundColor: Colors.green.shade50,
+                      borderColor: Colors.green.shade200,
                     ),
-                    const SizedBox(height: 12),
-                    _buildPhaseSummaryPanel(),
-                    _buildUpcomingHighlightsPanel(),
-                    _buildQuickLogPanel(),
 
-                    // Symptoms & Notes Section
-                    const SizedBox(height: 24),
-                    GestureDetector(
-                      onTap: _showSymptomsAndNotes,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16.0),
-                        decoration: BoxDecoration(
-                          color: Colors.pink.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.pink.shade200),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    '➕ Log Symptoms & Notes',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF333333),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Track how you feel today',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.pink.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_forward, color: Colors.pink.shade600),
-                          ],
-                        ),
-                      ),
+                    const SizedBox(height: 16),
+
+                    // 4. Fasting Recommendation
+                    _buildRecommendationCard(
+                      title: 'Fasting',
+                      emoji: '⏱️',
+                      recommendation: fastingDetails,
+                      backgroundColor: Colors.orange.shade50,
+                      borderColor: Colors.orange.shade200,
                     ),
                   ],
                 ),
@@ -2449,7 +2119,53 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     );
   }
 
-  Widget _buildDashboardTile({
+  Widget _buildRecommendationCard({
+    required String title,
+    required String emoji,
+    required String recommendation,
+    required Color backgroundColor,
+    required Color borderColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14.0),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF333333),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            recommendation,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF555555),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhaseDataTile({
     required String emoji,
     required String title,
     required String subtitle,
@@ -2746,8 +2462,13 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     );
   }
 
-  // Collapsible Panel: Phase Summary
+  // Collapsible Panel: Phase Summary with Complete Guidance
   Widget _buildPhaseSummaryPanel() {
+    Map<String, String> guidance = getPhaseGuidance(widget.phase);
+    String hormonal = guidance['hormonal'] ?? '';
+    String workout = guidance['workout'] ?? '';
+    String nutrition = guidance['nutrition'] ?? '';
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -2761,7 +2482,7 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
           setState(() => _expandedPhaseSummary = expanded);
         },
         title: const Text(
-          'Phase Summary',
+          'Phase Summary & Guidance',
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         children: [
@@ -2770,6 +2491,144 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Hormonal Basis
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hormonal State',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        hormonal,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF333333),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Workout & Nutrition Guidance
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  getWorkoutPhaseEmoji(workout),
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Workout',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        workout,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF333333),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  getNutritionPhaseEmoji(nutrition),
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Nutrition',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        nutrition,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF333333),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
+                // Phase Characteristics
                 if (_phaseData != null) ...[
                   Text(
                     'Characteristics',
@@ -2788,80 +2647,6 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                       height: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Divider(color: Colors.grey.shade300),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Nutrition',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _phaseData!.dietName,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF333333),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Workout',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _phaseData!.workoutName,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF333333),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Fasting',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _phaseData!.fastingType,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF333333),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
                 ],
               ],
             ),
@@ -2877,7 +2662,37 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
     int dayOfCycle = (widget.date.difference(widget.lastPeriodStart).inDays %
             widget.cycleLength) +
         1;
-    int daysUntilPhaseChange = _phaseData?.endDay ?? 7 - dayOfCycle + 1;
+    
+    // Calculate phase end day based on current phase using new boundaries:
+    // - Menstrual: Day 1–periodLength
+    // - Follicular: Day (periodLength+1)–(ovulationDay-2)
+    // - Ovulation: Day (ovulationDay-1)–(ovulationDay+1)
+    // - Early Luteal: Day (ovulationDay+2)–(ovulationDay+5)
+    // - Luteal: Day (ovulationDay+6)–cycleLength
+    int phaseEndDay = widget.cycleLength;
+    String currentPhase = getCyclePhase(widget.lastPeriodStart, widget.cycleLength, widget.date,
+        menstrualLength: widget.menstrualLength);
+    final ovulationDay = widget.cycleLength - 14;
+    
+    switch (currentPhase) {
+      case 'Menstrual':
+        phaseEndDay = widget.menstrualLength;
+        break;
+      case 'Follicular':
+        phaseEndDay = ovulationDay - 2;
+        break;
+      case 'Ovulation':
+        phaseEndDay = ovulationDay + 1;
+        break;
+      case 'Early Luteal':
+        phaseEndDay = ovulationDay + 5;
+        break;
+      case 'Luteal':
+        phaseEndDay = widget.cycleLength;
+        break;
+    }
+    
+    int daysUntilPhaseChange = phaseEndDay - dayOfCycle + 1;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -2931,24 +2746,60 @@ class _DayDetailsModalState extends State<DayDetailsModal> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Next Phase',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_phaseData?.nextPhase != null)
-                  Text(
-                    _phaseData!.nextPhase!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF333333),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Next Phase',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (_phaseData?.nextPhase != null)
+                            Text(
+                              _phaseData!.nextPhase!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF333333),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Next Period',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _getNextPeriodDateFormatted(),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -3168,26 +3019,16 @@ class _AchievementCelebrationDialogState extends State<AchievementCelebrationDia
                     ),
                     const SizedBox(height: 16),
 
-                    // Badge
+                    // Badge - Minimalist
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.amber.shade300, Colors.amber.shade500],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: Colors.amber.shade50,
                         borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.amber.shade400.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
+                        border: Border.all(color: Colors.amber.shade300, width: 1),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -3202,7 +3043,7 @@ class _AchievementCelebrationDialogState extends State<AchievementCelebrationDia
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Colors.amber,
                             ),
                           ),
                           SizedBox(width: 8),

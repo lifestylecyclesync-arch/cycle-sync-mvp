@@ -119,14 +119,12 @@ void main() {
       expect(luteal.workoutName, 'Mid- to Low-Impact Training');
     });
 
-    test('Phase day ranges are correct for 28-day cycle', () {
-      Phase menstrual = CyclePhases.phases[0];
-      Phase follicular = CyclePhases.phases[1];
-      Phase ovulation = CyclePhases.phases[2];
-
-      expect(menstrual.getDayRange(28), 'Days 1–5');
-      expect(follicular.getDayRange(28), 'Days 6–12');
-      expect(ovulation.getDayRange(28), 'Days 13–15');
+    test('Phase names and data are correct', () {
+      expect(CyclePhases.phases[0].name, 'Menstrual');
+      expect(CyclePhases.phases[1].name, 'Follicular');
+      expect(CyclePhases.phases[2].name, 'Ovulation');
+      expect(CyclePhases.phases[3].name, 'Early Luteal');
+      expect(CyclePhases.phases[4].name, 'Luteal');
     });
   });
 }

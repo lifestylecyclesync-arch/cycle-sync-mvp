@@ -9,11 +9,13 @@ import 'fitness_suggestions_screen.dart';
 class LifestyleSyncingScreen extends StatefulWidget {
   final DateTime lastPeriodStart;
   final int cycleLength;
+  final int menstrualLength;
 
   const LifestyleSyncingScreen({
     super.key,
     required this.lastPeriodStart,
     required this.cycleLength,
+    this.menstrualLength = 5,
   });
 
   @override
@@ -38,7 +40,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
     super.initState();
     _today = DateTime.now();
     _currentCycleDay = (_today.difference(widget.lastPeriodStart).inDays % widget.cycleLength) + 1;
-    _currentPhase = getCyclePhase(widget.lastPeriodStart, widget.cycleLength, _today);
+    _currentPhase = getCyclePhase(widget.lastPeriodStart, widget.cycleLength, _today, menstrualLength: widget.menstrualLength);
     _currentPhaseData = CyclePhases.findPhaseByName(_currentPhase);
     _loadCustomizations();
     _loadGoals();
@@ -93,6 +95,31 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
         return 'IF 12';
       default:
         return 'IF 16';
+    }
+  }
+
+  String _getPhaseRange(String phaseName) {
+    // Calculate day ranges based on cycle parameters using new phase boundaries:
+    // - Menstrual: Day 1–periodLength
+    // - Follicular: Day (periodLength+1)–(ovulationDay-2)
+    // - Ovulation: Day (ovulationDay-1)–(ovulationDay+1)
+    // - Early Luteal: Day (ovulationDay+2)–(ovulationDay+5)
+    // - Luteal: Day (ovulationDay+6)–cycleLength
+    final ovulationDay = widget.cycleLength - 14;
+    
+    switch (phaseName) {
+      case 'Menstrual':
+        return 'Days 1–${widget.menstrualLength}';
+      case 'Follicular':
+        return 'Days ${widget.menstrualLength + 1}–${ovulationDay - 2}';
+      case 'Ovulation':
+        return 'Days ${ovulationDay - 1}–${ovulationDay + 1}';
+      case 'Early Luteal':
+        return 'Days ${ovulationDay + 2}–${ovulationDay + 5}';
+      case 'Luteal':
+        return 'Days ${ovulationDay + 6}–${widget.cycleLength}';
+      default:
+        return 'Days 1–${widget.cycleLength}';
     }
   }
 
@@ -221,7 +248,7 @@ class _LifestyleSyncingScreenState extends State<LifestyleSyncingScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${_currentPhaseData?.getDayRange(widget.cycleLength) ?? 'Days 1–28'} • ${_currentPhaseData?.workoutName ?? 'Unknown'}',
+                      '${_getPhaseRange(_currentPhaseData?.name ?? 'Menstrual')} • ${_currentPhaseData?.workoutName ?? 'Unknown'}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF666666),

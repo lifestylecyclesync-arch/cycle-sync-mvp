@@ -67,13 +67,28 @@ class Cycle {
     return (range['end'] ?? 0) - currentDay + 1;
   }
 
-  // Get phase range by type (using standard cycle calculation)
+  // Get phase range by type (using adaptive cycle calculation with menstrualLength)
+  // Formula from PHASE_QUICK_REFERENCE.md:
+  // - Menstrual: Day 1 → menstrualLength
+  // - Follicular: Day (menstrualLength + 1) → (ovulationDay - 2)
+  // - Ovulation: Day (ovulationDay - 2) → (ovulationDay + 2) [5-day Manifestation window]
+  // Phase boundaries from new adaptive table:
+  // - Menstrual: Day 1 → periodLength
+  // - Follicular: Day (periodLength + 1) → (ovulationDay - 2)
+  // - Ovulation: Day (ovulationDay - 1) → (ovulationDay + 1)
+  // - Early Luteal: Day (ovulationDay + 2) → (ovulationDay + 5)
+  // - Late Luteal: Day (ovulationDay + 6) → cycleLength
+  // Where: ovulationDay = cycleLength - 14
   Map<String, Map<String, int>> getPhaseRange() {
+    // Calculate ovulation day using fixed luteal length (14 days)
+    final ovulationDay = cycleLength - 14;
+    
     return {
       'menstrual': {'start': 1, 'end': periodLength},
-      'follicular': {'start': periodLength + 1, 'end': 21},
-      'ovulatory': {'start': 22, 'end': 25},
-      'luteal': {'start': 26, 'end': cycleLength},
+      'follicular': {'start': periodLength + 1, 'end': ovulationDay - 2},
+      'ovulatory': {'start': ovulationDay - 1, 'end': ovulationDay + 1},
+      'early_luteal': {'start': ovulationDay + 2, 'end': ovulationDay + 5},
+      'luteal': {'start': ovulationDay + 6, 'end': cycleLength},
     };
   }
 

@@ -3,7 +3,6 @@ import 'dashboard_screen.dart';
 import 'calendar_screen.dart';
 import 'profile_screen.dart';
 import 'insights_screen.dart';
-import '../widgets/cycle_fab.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -87,51 +86,110 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          PageView(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            children: const [
-              DashboardScreen(),
-              CalendarScreen(),
-              ProfileScreen(),
-              InsightsScreen(),
-            ],
-          ),
-          // FAB overlaid on top of pages
-          CycleFAB(
-            onLogSymptoms: _handleLogSymptoms,
-            onAddGoal: _handleAddGoal,
-          ),
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        children: const [
+          DashboardScreen(),
+          CalendarScreen(),
+          InsightsScreen(),
+          ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onNavBarTapped,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+      floatingActionButton: FloatingActionButton(
+        elevation: 0,
+        backgroundColor: Colors.blue,
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            builder: (BuildContext context) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.edit, color: Colors.blue),
+                      title: const Text('Log Symptoms & Notes'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _handleLogSymptoms();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.add, color: Colors.blue),
+                      title: const Text('Add Goal'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _handleAddGoal();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+        child: const Icon(Icons.add, size: 28),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomAppBar(
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 10,
+        elevation: 8,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(0, Icons.dashboard, 'Dashboard'),
+              _buildNavItem(1, Icons.calendar_month, 'Calendar'),
+              const SizedBox(width: 60), // Space for FAB
+              _buildNavItem(2, Icons.insights, 'Insights'),
+              _buildNavItem(3, Icons.person, 'Profile'),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: 'Calendar',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => _onNavBarTapped(index),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 24,
+                color: isSelected ? Colors.blue : Colors.grey.shade400,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isSelected ? Colors.blue : Colors.grey.shade400,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.insights),
-            label: 'Insights',
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -233,31 +233,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 30),
 
-              // Profile Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Personal Information',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF999999),
-                        ),
+              // Profile Card - Minimalist
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Personal Information',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF999999),
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _userNameController,
-                        decoration: InputDecoration(
-                          labelText: 'Name',
-                          hintText: 'Guest',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _userNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Name',
+                        hintText: 'Guest',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         ),
@@ -269,7 +269,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-              ),
               const SizedBox(height: 30),
 
               // MY DATA SECTION - Collapsible cards
@@ -283,10 +282,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Cycle Info Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
+              // Cycle Info Card - Minimalist
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
                 child: ExpansionTile(
                   initiallyExpanded: _expandedCycleInfo,
                   onExpansionChanged: (expanded) {
@@ -335,10 +335,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Preferences Card
-              Card(
-                elevation: 0,
-                color: Colors.grey.shade50,
+              // Preferences Card - Minimalist
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
                 child: ExpansionTile(
                   initiallyExpanded: _expandedPreferences,
                   onExpansionChanged: (expanded) {
@@ -409,10 +410,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Complete Setup Card (if applicable)
-              Card(
-                elevation: 0,
-                color: Colors.amber.shade50,
+              // Complete Setup Card - Minimalist
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
                 child: ExpansionTile(
                   initiallyExpanded: _expandedCompleteSetup,
                   onExpansionChanged: (expanded) {
@@ -993,15 +995,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: _selectedAvatar?.isPhoto == true ? 3 : 2,
                       style: BorderStyle.solid,
                     ),
-                    boxShadow: _selectedAvatar?.isPhoto == true
-                        ? [
-                            BoxShadow(
-                              color: Colors.pink.withValues(alpha: 0.4),
-                              blurRadius: 8,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : null,
                   ),
                   child: Material(
                     color: Colors.transparent,
@@ -1109,15 +1102,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: isSelected ? Colors.pink : Colors.transparent,
                             width: 3,
                           ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: Colors.pink.withValues(alpha: 0.4),
-                                    blurRadius: 8,
-                                    spreadRadius: 2,
-                                  ),
-                                ]
-                              : null,
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
