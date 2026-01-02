@@ -59,6 +59,7 @@ void main() {
         expect(getCyclePhase(lastPeriodStart, cycleLength26, DateTime(2024, 1, 14), menstrualLength: menstrualLength), 'Early Luteal'); // Day 14 (OD+2)
         expect(getCyclePhase(lastPeriodStart, cycleLength26, DateTime(2024, 1, 17), menstrualLength: menstrualLength), 'Early Luteal'); // Day 17 (OD+5)
         expect(getCyclePhase(lastPeriodStart, cycleLength26, DateTime(2024, 1, 18), menstrualLength: menstrualLength), 'Luteal (Late)'); // Day 18 (OD+6)
+      });
     });
 
     group('32-day cycle tests', () {

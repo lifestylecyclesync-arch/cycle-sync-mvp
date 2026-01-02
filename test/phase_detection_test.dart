@@ -69,7 +69,7 @@ void main() {
       expect(phase, 'Ovulation');
       
       Phase? phaseData = CyclePhases.findPhaseByName(phase);
-      expect(phaseData?.workoutType, isNotEmpty
+      expect(phaseData?.workoutType, isNotEmpty);
     });
 
     test('3-day ovulation window (OD-1 to OD+1)', () {
